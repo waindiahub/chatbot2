@@ -51,13 +51,36 @@ app.get('/api/chat', (req, res) => {
   });
 });
 
-// Chat endpoint
+// Chat endpoint with comprehensive error handling
 app.post('/api/chat', async (req, res) => {
+  const timestamp = new Date().toISOString();
+  
   try {
     const { query } = req.body;
     
-    if (!query) {
-      return res.status(400).json({ error: 'Query parameter required' });
+    // Log incoming request
+    console.log(`[${timestamp}] Chat Request:`, {
+      query: query?.substring(0, 100) + (query?.length > 100 ? '...' : ''),
+      ip: req.ip
+    });
+    
+    // Validate input
+    if (!query || typeof query !== 'string' || query.trim().length === 0) {
+      console.log(`[${timestamp}] 400 - Bad Request: Empty or invalid query`);
+      return res.status(400).json({ 
+        error: 'Bad request',
+        message: 'Query is required and must be a non-empty string',
+        timestamp
+      });
+    }
+
+    if (query.length > 5000) {
+      console.log(`[${timestamp}] 400 - Bad Request: Query too long (${query.length} chars)`);
+      return res.status(400).json({ 
+        error: 'Bad request',
+        message: 'Query is too long. Please limit to 5000 characters.',
+        timestamp
+      });
     }
 
     let prompt;
@@ -67,25 +90,37 @@ app.post('/api/chat', async (req, res) => {
         let documents = [];
         
         // Use embedded ChromaDB collection
-        const results = await collection.query(query, 8);
-        documents = results.documents[0] || [];
+        const chromaResults = await collection.query(query, 8);
+        documents = chromaResults.documents[0] || [];
         
         if (documents.length === 0) {
           // If no documents found in ChromaDB, fall back to enhanced corpus search
           chromaAvailable = false;
         } else {
           const context = documents.slice(0, 8).join('\n\n');
-          prompt = `You are a ProSchool360 expert assistant for the comprehensive school management system at https://proschool360.com.
+          const suggestedUrls = chromaResults.suggestedUrls || ['https://proschool360.com'];
+          
+          // Detect if question is about ProSchool360
+        const isProSchoolQuery = isProSchool360Query(query, context);
+        const queryLanguage = detectLanguage(query);
+        
+        prompt = `You are a ProSchool360 expert assistant for the comprehensive school management system at https://proschool360.com.
 
 ProSchool360 System Context:
 ${context}
 
 User Question: ${query}
+Query Language: ${queryLanguage}
+Is ProSchool360 Related: ${isProSchoolQuery}
 
 Provide detailed, knowledgeable answers about ProSchool360 based on the available data. Follow these guidelines:
 
 🎯 RESPONSE STYLE:
-- Always respond in friendly, professional English
+- ALWAYS respond in the SAME LANGUAGE as the user's question
+- Support ALL languages worldwide (Hindi, English, Spanish, French, German, Arabic, Chinese, Japanese, Korean, Russian, etc.)
+- If asked in Hindi about ProSchool360, respond completely in Hindi
+- If asked in Spanish about ProSchool360, respond completely in Spanish
+- If asked in any other language about ProSchool360, respond in that language
 - Provide step-by-step instructions when needed
 - Focus on ProSchool360-specific features and capabilities
 - Give practical examples and use cases
@@ -106,7 +141,19 @@ Provide detailed, knowledgeable answers about ProSchool360 based on the availabl
 - Provide workflow tips
 - Share time-saving shortcuts
 
+🚫 IMPORTANT RESTRICTIONS:
+- ONLY answer if the question is about ProSchool360 school management features
+- If NOT about ProSchool360, politely redirect to ProSchool360 topics in the user's language
+- ALWAYS respond in the same language as the user's question
+
+🔗 IMPORTANT: Always end your response with these relevant ProSchool360 links:
+**Relevant Links:**
+${suggestedUrls.map(url => `• ${url}`).join('\n')}
+
 Answer comprehensively based on the ProSchool360 system data provided to help users effectively use the system.`;
+          
+          // Store results for response
+          res.locals.chromaResults = chromaResults;
         }
         
 
@@ -119,12 +166,17 @@ Answer comprehensively based on the ProSchool360 system data provided to help us
     if (!chromaAvailable) {
       // Enhanced fallback mode with better context
       try {
+        console.log(`[${timestamp}] Using fallback mode - ChromaDB unavailable`);
         const contextInfo = await getEnhancedProSchool360Context(query);
+        const detectedLanguage = detectLanguage(query);
+        
         prompt = `You are an expert ProSchool360 assistant for the complete school management system at https://proschool360.com.
 
 ${contextInfo}
 
 User Question: ${query}
+
+🌐 LANGUAGE: Respond in the SAME language as the user's question. User asked in: ${detectedLanguage}
 
 Provide detailed and helpful answers as an experienced ProSchool360 guide. Focus on:
 
@@ -150,57 +202,224 @@ Provide detailed and helpful answers as an experienced ProSchool360 guide. Focus
 - Time-saving features
 - Troubleshooting guidance
 
+🚫 IMPORTANT: ALWAYS respond in the same language as the user's question (${detectedLanguage}).
+
 Provide ProSchool360-specific and practical advice to help users effectively use the system.`;
       } catch (fallbackError) {
-        console.error('Fallback context generation failed:', fallbackError.message);
-        // Basic fallback prompt
+        console.error(`[${timestamp}] Fallback Error:`, {
+          message: fallbackError.message,
+          stack: fallbackError.stack
+        });
+        
+        const detectedLanguage = detectLanguage(query);
         prompt = `You are a ProSchool360 assistant. The user asked: "${query}"
+
+🌐 LANGUAGE: Respond in ${detectedLanguage} (same as user's question)
 
 ProSchool360 is a comprehensive school management system available at https://proschool360.com.
 
-If this question is about ProSchool360 features like student management, teacher management, fees, attendance, exams, or other school operations, provide helpful guidance.
+If this question is about ProSchool360 features like student management, teacher management, fees, attendance, exams, or other school operations, provide helpful guidance in ${detectedLanguage}.
 
-If this question is not related to ProSchool360 or school management, politely explain that you specialize in ProSchool360 assistance and suggest they ask about school management topics.`;
+If this question is not related to ProSchool360 or school management, politely explain in ${detectedLanguage} that you specialize in ProSchool360 assistance and suggest they ask about school management topics.`;
       }
     }
 
     // Validate prompt before API call
     if (!prompt || prompt.trim().length === 0) {
-      return res.json({
-        reply: "I'm here to help with ProSchool360 questions. Please ask about student management, teacher management, fees, attendance, exams, or other school management topics.",
-        mode: 'error_fallback',
-        suggestedUrls: ['https://proschool360.com']
+      console.log(`[${timestamp}] Error: Empty prompt generated`);
+      return res.status(500).json({
+        error: 'Internal server error',
+        message: "Unable to generate response prompt",
+        timestamp
       });
     }
 
-    // Call Gemini API
-    const geminiResponse = await axios.post(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
-      {
-        contents: [{
-          parts: [{ text: prompt }]
-        }]
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-goog-api-key': process.env.GEMINI_API_KEY
-        }
-      }
-    );
+    // Validate API key
+    if (!process.env.GEMINI_API_KEY) {
+      console.error(`[${timestamp}] Error: Missing GEMINI_API_KEY`);
+      return res.status(500).json({
+        error: 'Configuration error',
+        message: 'AI service is not properly configured',
+        timestamp
+      });
+    }
 
-    const reply = geminiResponse.data.candidates[0]?.content?.parts[0]?.text || 'I apologize, but I could not generate a response. Please try rephrasing your question about ProSchool360.';
+    // Call Gemini API with timeout and error handling
+    let geminiResponse;
+    try {
+      console.log(`[${timestamp}] Calling Gemini API...`);
+      geminiResponse = await axios.post(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+        {
+          contents: [{
+            parts: [{ text: prompt }]
+          }]
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'X-goog-api-key': process.env.GEMINI_API_KEY
+          },
+          timeout: 30000 // 30 second timeout
+        }
+      );
+      console.log(`[${timestamp}] Gemini API call successful`);
+    } catch (apiError) {
+      console.error(`[${timestamp}] Gemini API Error:`, {
+        message: apiError.message,
+        status: apiError.response?.status,
+        statusText: apiError.response?.statusText,
+        data: apiError.response?.data
+      });
+      
+      if (apiError.response?.status === 429) {
+        return res.status(429).json({
+          error: 'Rate limit exceeded',
+          message: 'Too many requests. Please try again later.',
+          timestamp
+        });
+      } else if (apiError.response?.status === 401) {
+        return res.status(500).json({
+          error: 'Authentication error',
+          message: 'AI service authentication failed',
+          timestamp
+        });
+      } else if (apiError.code === 'ECONNABORTED') {
+        return res.status(504).json({
+          error: 'Timeout error',
+          message: 'Request timed out. Please try again.',
+          timestamp
+        });
+      } else {
+        return res.status(502).json({
+          error: 'AI service error',
+          message: 'Unable to get response from AI service',
+          timestamp
+        });
+      }
+    }
+
+    // Validate API response
+    const reply = geminiResponse.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!reply) {
+      console.error(`[${timestamp}] Invalid Gemini response:`, geminiResponse.data);
+      return res.status(502).json({
+        error: 'Invalid AI response',
+        message: 'Received invalid response from AI service',
+        timestamp
+      });
+    }
     
+    console.log(`[${timestamp}] Response generated successfully`);
     res.json({ 
       reply,
-      mode: chromaAvailable ? 'embedded_chromadb' : 'enhanced_corpus_search'
+      mode: chromaAvailable ? 'embedded_chromadb' : 'enhanced_corpus_search',
+      suggestedUrls: res.locals.chromaResults ? res.locals.chromaResults.suggestedUrls : ['https://proschool360.com'],
+      timestamp
     });
 
   } catch (error) {
-    console.error('Error:', error.message);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error(`[${timestamp}] Unexpected Error:`, {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        error: 'Internal server error',
+        message: 'An unexpected error occurred. Please try again.',
+        timestamp
+      });
+    }
   }
 });
+
+// Enhanced language detection for worldwide support
+function detectLanguage(query) {
+  try {
+    // Unicode ranges for different scripts
+    const scriptRanges = {
+      'Hindi': /[\u0900-\u097F]/,
+      'Arabic': /[\u0600-\u06FF]/,
+      'Chinese': /[\u4e00-\u9fff]/,
+      'Japanese': /[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]/,
+      'Korean': /[\uac00-\ud7af]/,
+      'Russian': /[\u0400-\u04FF]/,
+      'Greek': /[\u0370-\u03FF]/,
+      'Thai': /[\u0e00-\u0e7f]/,
+      'Bengali': /[\u0980-\u09FF]/,
+      'Tamil': /[\u0B80-\u0BFF]/,
+      'Telugu': /[\u0C00-\u0C7F]/,
+      'Gujarati': /[\u0A80-\u0AFF]/,
+      'Punjabi': /[\u0A00-\u0A7F]/,
+      'Malayalam': /[\u0D00-\u0D7F]/,
+      'Kannada': /[\u0C80-\u0CFF]/,
+      'Oriya': /[\u0B00-\u0B7F]/,
+      'Urdu': /[\u0600-\u06FF]/,
+      'Persian': /[\u0600-\u06FF]/,
+      'Hebrew': /[\u0590-\u05FF]/,
+      'Vietnamese': /[\u1EA0-\u1EF9]/
+    };
+    
+    // Check for specific script patterns
+    for (const [language, pattern] of Object.entries(scriptRanges)) {
+      if (pattern.test(query)) {
+        return language;
+      }
+    }
+    
+    // Common words detection for major languages
+    const languageKeywords = {
+      'Hindi': ['कैसे', 'क्या', 'कहाँ', 'कब', 'क्यों', 'में', 'का', 'की', 'के', 'है', 'हैं', 'था', 'थी', 'थे', 'होगा', 'होगी', 'होंगे', 'छात्र', 'विद्यार्थी', 'स्कूल', 'शिक्षक', 'फीस'],
+      'Spanish': ['cómo', 'qué', 'dónde', 'cuándo', 'por qué', 'estudiante', 'profesor', 'escuela', 'clase', 'examen'],
+      'French': ['comment', 'quoi', 'où', 'quand', 'pourquoi', 'étudiant', 'professeur', 'école', 'classe', 'examen'],
+      'German': ['wie', 'was', 'wo', 'wann', 'warum', 'student', 'lehrer', 'schule', 'klasse', 'prüfung'],
+      'Portuguese': ['como', 'que', 'onde', 'quando', 'por que', 'estudante', 'professor', 'escola', 'classe', 'exame'],
+      'Italian': ['come', 'cosa', 'dove', 'quando', 'perché', 'studente', 'insegnante', 'scuola', 'classe', 'esame'],
+      'Russian': ['как', 'что', 'где', 'когда', 'почему', 'студент', 'учитель', 'школа', 'класс', 'экзамен'],
+      'Japanese': ['どう', 'なに', 'どこ', 'いつ', 'なぜ', '学生', '先生', '学校', 'クラス', '試験'],
+      'Korean': ['어떻게', '무엇', '어디', '언제', '왜', '학생', '선생님', '학교', '수업', '시험'],
+      'Arabic': ['كيف', 'ماذا', 'أين', 'متى', 'لماذا', 'طالب', 'معلم', 'مدرسة', 'فصل', 'امتحان']
+    };
+    
+    const queryLower = query.toLowerCase();
+    
+    // Check for language-specific keywords
+    for (const [language, keywords] of Object.entries(languageKeywords)) {
+      if (keywords.some(keyword => queryLower.includes(keyword.toLowerCase()))) {
+        return language;
+      }
+    }
+    
+    // Default to English if no specific language detected
+    return 'English';
+  } catch (error) {
+    console.error('Language detection error:', error.message);
+    return 'English';
+  }
+}
+
+// Helper function to check if query is about ProSchool360
+function isProSchool360Query(query, context = '') {
+  const proschoolKeywords = [
+    'student', 'teacher', 'fee', 'attendance', 'exam', 'class', 'school', 'admission', 'grade',
+    'छात्र', 'विद्यार्थी', 'शिक्षक', 'फीस', 'उपस्थिति', 'परीक्षा', 'कक्षा', 'स्कूल', 'प्रवेश', 'ग्रेड',
+    'proschool', 'management', 'system', 'dashboard', 'login', 'report'
+  ];
+  
+  const queryLower = query.toLowerCase();
+  const hasProSchoolKeywords = proschoolKeywords.some(keyword => 
+    queryLower.includes(keyword.toLowerCase())
+  );
+  
+  // Also check if context contains ProSchool360 related content
+  const hasRelevantContext = context.toLowerCase().includes('proschool') || 
+                            context.toLowerCase().includes('student') ||
+                            context.toLowerCase().includes('school');
+  
+  return hasProSchoolKeywords || hasRelevantContext;
+}
 
 // Enhanced helper function to get comprehensive ProSchool360 context
 async function getEnhancedProSchool360Context(query) {
@@ -547,5 +766,43 @@ For specific guidance on using ProSchool360 features, please ask about:
 initChroma().then(() => {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+  });
+});
+
+// Global error handler middleware (must be after all routes)
+app.use((err, req, res, next) => {
+  const timestamp = new Date().toISOString();
+  console.error(`[${timestamp}] ERROR:`, {
+    message: err.message,
+    stack: err.stack,
+    url: req.url,
+    method: req.method,
+    ip: req.ip
+  });
+  
+  if (res.headersSent) {
+    return next(err);
+  }
+  
+  res.status(500).json({
+    error: 'Internal server error',
+    message: 'Something went wrong. Please try again.',
+    timestamp
+  });
+});
+
+// 404 handler (must be after all routes)
+app.use((req, res) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] 404 - Not Found:`, {
+    url: req.url,
+    method: req.method,
+    ip: req.ip
+  });
+  
+  res.status(404).json({
+    error: 'Not found',
+    message: 'The requested resource was not found',
+    timestamp
   });
 });
