@@ -62,8 +62,18 @@ class EmbeddedChromaDB {
       throw new Error('ChromaDB not initialized');
     }
 
+    if (!queryText || typeof queryText !== 'string' || queryText.trim().length === 0) {
+      return {
+        documents: [[]],
+        metadatas: [[]],
+        distances: [[]],
+        ids: [[]],
+        suggestedUrls: ['https://proschool360.com']
+      };
+    }
+
     const queryLower = queryText.toLowerCase();
-    const queryTerms = queryLower.split(' ');
+    const queryTerms = queryLower.split(' ').filter(term => term.length > 0);
     
     // Calculate similarity scores
     const results = [];

@@ -118,8 +118,9 @@ Answer comprehensively based on the ProSchool360 system data provided to help us
     
     if (!chromaAvailable) {
       // Enhanced fallback mode with better context
-      const contextInfo = await getEnhancedProSchool360Context(query);
-      prompt = `You are an expert ProSchool360 assistant for the complete school management system at https://proschool360.com.
+      try {
+        const contextInfo = await getEnhancedProSchool360Context(query);
+        prompt = `You are an expert ProSchool360 assistant for the complete school management system at https://proschool360.com.
 
 ${contextInfo}
 
@@ -150,6 +151,26 @@ Provide detailed and helpful answers as an experienced ProSchool360 guide. Focus
 - Troubleshooting guidance
 
 Provide ProSchool360-specific and practical advice to help users effectively use the system.`;
+      } catch (fallbackError) {
+        console.error('Fallback context generation failed:', fallbackError.message);
+        // Basic fallback prompt
+        prompt = `You are a ProSchool360 assistant. The user asked: "${query}"
+
+ProSchool360 is a comprehensive school management system available at https://proschool360.com.
+
+If this question is about ProSchool360 features like student management, teacher management, fees, attendance, exams, or other school operations, provide helpful guidance.
+
+If this question is not related to ProSchool360 or school management, politely explain that you specialize in ProSchool360 assistance and suggest they ask about school management topics.`;
+      }
+    }
+
+    // Validate prompt before API call
+    if (!prompt || prompt.trim().length === 0) {
+      return res.json({
+        reply: "I'm here to help with ProSchool360 questions. Please ask about student management, teacher management, fees, attendance, exams, or other school management topics.",
+        mode: 'error_fallback',
+        suggestedUrls: ['https://proschool360.com']
+      });
     }
 
     // Call Gemini API
@@ -168,7 +189,7 @@ Provide ProSchool360-specific and practical advice to help users effectively use
       }
     );
 
-    const reply = geminiResponse.data.candidates[0]?.content?.parts[0]?.text || 'No response generated';
+    const reply = geminiResponse.data.candidates[0]?.content?.parts[0]?.text || 'I apologize, but I could not generate a response. Please try rephrasing your question about ProSchool360.';
     
     res.json({ 
       reply,
@@ -496,13 +517,14 @@ async function getEnhancedProSchool360Context(query) {
     
   } catch (error) {
     console.error('Error getting enhanced context:', error);
+    // Return basic context even if file reading fails
     return `🏫 ProSchool360 - Complete School Management System
 
 📍 Website: https://proschool360.com
 
 ✨ KEY FEATURES:
   • Student Management & Admission
-  • Teacher & Staff Administration
+  • Teacher & Staff Administration  
   • Fee Management & Billing
   • Attendance Tracking
   • Exam & Grade Management
@@ -510,7 +532,14 @@ async function getEnhancedProSchool360Context(query) {
   • Parent Communication Portal
   • Multi-branch Support
 
-💡 ProSchool360 is a comprehensive solution that meets all school management needs.`;
+💡 ProSchool360 is a comprehensive solution that meets all school management needs.
+
+For specific guidance on using ProSchool360 features, please ask about:
+- How to add students
+- How to take attendance
+- How to manage fees
+- How to create exams
+- How to generate reports`;
   }
 }
 
