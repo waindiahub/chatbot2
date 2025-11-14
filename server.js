@@ -226,12 +226,12 @@ Answer comprehensively based on the ProSchool360 system data provided to help us
           console.log(`[${timestamp}] Translation failed, using original query:`, translateError.message);
         }
         
-        const contextInfo = await getEnhancedProSchool360Context(englishQuery);
+        const enhancedContext = await getEnhancedProSchool360Context(englishQuery);
         
         prompt = `You are an expert ProSchool360 assistant for the complete school management system at https://proschool360.com.
 
 ProSchool360 System Context (English data from database):
-${contextInfo}
+${enhancedContext}
 
 Original User Question: ${query}
 English Translation Used for Search: ${englishQuery}
