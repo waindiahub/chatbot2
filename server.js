@@ -32,6 +32,14 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', message: 'ProSchool360 Chatbot API is running' });
 });
 
+// GET endpoint for testing
+app.get('/api/chat', (req, res) => {
+  res.json({ 
+    message: 'Use POST method with JSON body: {"query": "your question"}',
+    example: 'POST /api/chat with {"query": "What is ProSchool360?"}'
+  });
+});
+
 // Chat endpoint
 app.post('/api/chat', async (req, res) => {
   try {
