@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
-const { ChromaClient } = require('chromadb');
+const EmbeddedChromaDB = require('./chromadb_embedded');
 require('dotenv').config();
 
 const app = express();
@@ -16,34 +16,25 @@ let collection;
 let chromaAvailable = false;
 
 async function initChroma() {
-  // Try remote ChromaDB first (for production deployment)
-  const chromaUrl = process.env.CHROMADB_URL;
-  if (chromaUrl) {
-    try {
-      const client = new ChromaClient({ path: chromaUrl });
-      collection = await client.getCollection({ name: 'proschool360' });
-      chromaAvailable = true;
-      console.log('Remote ChromaDB server connected successfully');
-      return;
-    } catch (error) {
-      console.log('Remote ChromaDB server not available:', error.message);
-    }
-  }
-  
-  // Try local ChromaDB server (for local development)
+  // Try embedded ChromaDB with your corpus data
   try {
-    const client = new ChromaClient({ path: 'http://localhost:8000' });
-    collection = await client.getCollection({ name: 'proschool360' });
-    chromaAvailable = true;
-    console.log('Local ChromaDB server connected successfully');
-    return;
-  } catch (localError) {
-    console.log('Local ChromaDB server not available');
+    collection = new EmbeddedChromaDB('./chroma_db');
+    const initialized = await collection.initialize();
+    
+    if (initialized) {
+      chromaAvailable = true;
+      const count = await collection.count();
+      console.log('🎯 Embedded ChromaDB initialized successfully');
+      console.log(`📚 Loaded ${count} ProSchool360 documents`);
+      console.log('✨ Using direct corpus data with semantic search');
+      return;
+    }
+  } catch (error) {
+    console.log('Embedded ChromaDB failed:', error.message);
   }
   
-  console.log('🚀 Running in Enhanced Corpus Mode');
-  console.log('📚 Using comprehensive ProSchool360 knowledge base with 500+ keywords');
-  console.log('✨ Advanced semantic search and context extraction enabled');
+  console.log('❌ ChromaDB initialization failed');
+  console.log('🚀 Falling back to Enhanced Corpus Mode');
   chromaAvailable = false;
 }
 
@@ -75,11 +66,8 @@ app.post('/api/chat', async (req, res) => {
       try {
         let documents = [];
         
-        // Use ChromaDB collection
-        const results = await collection.query({
-          queryTexts: [query],
-          nResults: 8
-        });
+        // Use embedded ChromaDB collection
+        const results = await collection.query(query, 8);
         documents = results.documents[0] || [];
         
         if (documents.length === 0) {
@@ -184,7 +172,7 @@ Provide ProSchool360-specific and practical advice to help users effectively use
     
     res.json({ 
       reply,
-      mode: chromaAvailable ? 'chromadb_context' : 'enhanced_corpus_search'
+      mode: chromaAvailable ? 'embedded_chromadb' : 'enhanced_corpus_search'
     });
 
   } catch (error) {
