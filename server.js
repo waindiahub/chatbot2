@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const { ChromaClient } = require('chromadb');
-const proschool360Context = require('./proschool360-context');
 require('dotenv').config();
 
 const app = express();
@@ -79,9 +78,9 @@ app.post('/api/chat', async (req, res) => {
     }
     
     if (!chromaAvailable) {
-      // Enhanced fallback with ProSchool360 context
-      const contextInfo = getRelevantContext(query);
-      prompt = `You are a ProSchool360 assistant. Use this specific ProSchool360 information:\n\n${contextInfo}\n\nQuestion: ${query}\n\nProvide accurate ProSchool360-specific steps, routes, and implementation details.`;
+      // Fallback mode - use corpus data directly
+      const contextInfo = await getProSchool360Context(query);
+      prompt = `You are a ProSchool360 assistant. Based on the ProSchool360 system at https://proschool360.com:\n\n${contextInfo}\n\nQuestion: ${query}\n\nProvide user-friendly instructions for ProSchool360. Focus on navigation paths and what users need to do, not technical implementation details.`;
     }
 
     // Call Gemini API
@@ -113,30 +112,32 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// Helper function to get relevant ProSchool360 context
-function getRelevantContext(query) {
-  const lowerQuery = query.toLowerCase();
-  
-  if (lowerQuery.includes('add') && lowerQuery.includes('student')) {
-    const context = proschool360Context.studentManagement.addStudent;
-    return `ProSchool360 Student Addition Process:
-
-Route: ${context.route}
-Controller: ${context.controller}
-URL: ${context.url}
-Permission: ${context.permission}
-Menu Path: ${context.menuPath}
-
-Steps:
-${context.process.join('\n')}
-
-Required Fields:
-${context.fields.join(', ')}
-
-Note: This is the actual ProSchool360 implementation, not generic school management steps.`;
+// Helper function to get ProSchool360 context from corpus
+async function getProSchool360Context(query) {
+  try {
+    const fs = require('fs').promises;
+    const corpus = JSON.parse(await fs.readFile('./proschool360_corpus.json', 'utf8'));
+    
+    // Search for relevant content in corpus
+    const searchTerms = query.toLowerCase().split(' ');
+    const relevantFiles = corpus.filter(file => {
+      const content = file.content.toLowerCase();
+      return searchTerms.some(term => content.includes(term));
+    }).slice(0, 3);
+    
+    if (relevantFiles.length > 0) {
+      const context = relevantFiles.map(file => {
+        const preview = file.content.substring(0, 500);
+        return `File: ${file.path}\n${preview}...`;
+      }).join('\n\n');
+      
+      return `ProSchool360 System Information:\n\n${context}`;
+    }
+    
+    return 'ProSchool360 is a comprehensive school management system available at https://proschool360.com.';
+  } catch (error) {
+    return 'ProSchool360 is a comprehensive school management system available at https://proschool360.com.';
   }
-  
-  return 'ProSchool360 is a comprehensive school management system with specific routes, controllers, and implementation patterns.';
 }
 
 // Initialize ChromaDB and start server
