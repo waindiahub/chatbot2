@@ -13,13 +13,17 @@ app.use(express.static('.'));
 
 // Initialize ChromaDB client
 let collection;
+let chromaAvailable = false;
+
 async function initChroma() {
   try {
     const client = new ChromaClient({ path: './chroma_db' });
     collection = await client.getCollection({ name: 'proschool360' });
+    chromaAvailable = true;
     console.log('ChromaDB connected successfully');
   } catch (error) {
-    console.error('ChromaDB connection failed:', error.message);
+    console.log('ChromaDB not available - running in fallback mode');
+    chromaAvailable = false;
   }
 }
 
@@ -37,21 +41,21 @@ app.post('/api/chat', async (req, res) => {
       return res.status(400).json({ error: 'Query parameter required' });
     }
 
-    if (!collection) {
-      return res.status(500).json({ error: 'ChromaDB not available' });
+    let prompt;
+    
+    if (chromaAvailable && collection) {
+      // Query ChromaDB if available
+      const results = await collection.query({
+        queryTexts: [query],
+        nResults: 5
+      });
+      const documents = results.documents[0] || [];
+      const context = documents.slice(0, 5).join('\n\n');
+      prompt = `Use the following ProSchool360 code context:\n\n${context}\n\nQuestion: ${query}`;
+    } else {
+      // Fallback mode without ChromaDB
+      prompt = `You are a ProSchool360 assistant. Answer this question about ProSchool360: ${query}`;
     }
-
-    // Query ChromaDB directly
-    const results = await collection.query({
-      queryTexts: [query],
-      nResults: 5
-    });
-
-    const documents = results.documents[0] || [];
-    const context = documents.slice(0, 5).join('\n\n');
-
-    // Build prompt
-    const prompt = `Use only the following ProSchool360 code:\n\n${context}\n\nQuestion: ${query}`;
 
     // Call Gemini API
     const geminiResponse = await axios.post(
@@ -71,7 +75,10 @@ app.post('/api/chat', async (req, res) => {
 
     const reply = geminiResponse.data.candidates[0]?.content?.parts[0]?.text || 'No response generated';
     
-    res.json({ reply });
+    res.json({ 
+      reply,
+      mode: chromaAvailable ? 'with_context' : 'fallback'
+    });
 
   } catch (error) {
     console.error('Error:', error.message);
