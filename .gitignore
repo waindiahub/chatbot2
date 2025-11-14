@@ -1,0 +1,11 @@
+node_modules/
+.env
+*.log
+.DS_Store
+temp/
+uploads/
+verify_response.py
+
+# Keep ChromaDB files for deployment
+!chroma_db/
+!chroma_db/**/*

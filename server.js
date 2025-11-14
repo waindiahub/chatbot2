@@ -16,24 +16,34 @@ let collection;
 let chromaAvailable = false;
 
 async function initChroma() {
-  const chromaUrl = process.env.CHROMADB_URL;
-  if (!chromaUrl) {
-    console.log('No CHROMADB_URL - running in fallback mode');
-    chromaAvailable = false;
+  try {
+    // Try local ChromaDB first
+    const client = new ChromaClient({ path: './chroma_db' });
+    collection = await client.getCollection({ name: 'proschool360' });
+    chromaAvailable = true;
+    console.log('Local ChromaDB connected successfully');
     return;
+  } catch (localError) {
+    console.log('Local ChromaDB not available, trying remote...');
   }
   
-  try {
-    // Test ChromaDB connection
-    const response = await axios.get(`${chromaUrl}/health`);
-    if (response.status === 200) {
-      chromaAvailable = true;
-      console.log('ChromaDB server connected successfully');
+  // Try remote ChromaDB
+  const chromaUrl = process.env.CHROMADB_URL;
+  if (chromaUrl) {
+    try {
+      const response = await axios.get(`${chromaUrl}/health`);
+      if (response.status === 200) {
+        chromaAvailable = true;
+        console.log('Remote ChromaDB server connected successfully');
+        return;
+      }
+    } catch (error) {
+      console.log('Remote ChromaDB server not available');
     }
-  } catch (error) {
-    console.log('ChromaDB server not available - running in fallback mode');
-    chromaAvailable = false;
   }
+  
+  console.log('No ChromaDB available - running in fallback mode');
+  chromaAvailable = false;
 }
 
 // Health check endpoint
@@ -62,15 +72,26 @@ app.post('/api/chat', async (req, res) => {
     
     if (chromaAvailable) {
       try {
-        // Query remote ChromaDB
-        const chromaResponse = await axios.post(`${process.env.CHROMADB_URL}/api/v1/collections/proschool360/query`, {
-          query_texts: [query],
-          n_results: 5
-        });
+        let documents = [];
         
-        const documents = chromaResponse.data.documents[0] || [];
+        if (collection) {
+          // Use local ChromaDB
+          const results = await collection.query({
+            queryTexts: [query],
+            nResults: 5
+          });
+          documents = results.documents[0] || [];
+        } else {
+          // Use remote ChromaDB
+          const chromaResponse = await axios.post(`${process.env.CHROMADB_URL}/api/v1/collections/proschool360/query`, {
+            query_texts: [query],
+            n_results: 5
+          });
+          documents = chromaResponse.data.documents[0] || [];
+        }
+        
         const context = documents.slice(0, 5).join('\n\n');
-        prompt = `Based on the ProSchool360 codebase:\n\n${context}\n\nQuestion: ${query}\n\nProvide specific ProSchool360 implementation details, routes, and code references.`;
+        prompt = `You are a ProSchool360 assistant for https://proschool360.com. Based on the ProSchool360 system:\n\n${context}\n\nQuestion: ${query}\n\nProvide user-friendly instructions for ProSchool360. Focus on navigation, menus, and what users need to do. Do NOT mention technical details like file paths or code.`;
       } catch (error) {
         console.error('ChromaDB query failed:', error.message);
         chromaAvailable = false;

@@ -19,5 +19,11 @@
   },
   "engines": {
     "node": ">=18.0.0"
-  }
+  },
+  "files": [
+    "chroma_db/**/*",
+    "proschool360_corpus.json",
+    "server.js",
+    "package.json"
+  ]
 }
