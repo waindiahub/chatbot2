@@ -4,10 +4,12 @@ services:
     env: node
     buildCommand: |
       npm cache clean --force
-      npm install --production
+      npm install
     startCommand: node server.js
     envVars:
       - key: GEMINI_API_KEY
         sync: false
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 10000
