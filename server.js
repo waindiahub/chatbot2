@@ -102,7 +102,6 @@ app.post('/api/chat', async (req, res) => {
           
           // Detect if question is about ProSchool360
         const isProSchoolQuery = isProSchool360Query(query, context);
-        const queryLanguage = detectLanguage(query);
         
         prompt = `You are a ProSchool360 expert assistant for the comprehensive school management system at https://proschool360.com.
 
@@ -110,17 +109,16 @@ ProSchool360 System Context:
 ${context}
 
 User Question: ${query}
-Query Language: ${queryLanguage}
 Is ProSchool360 Related: ${isProSchoolQuery}
 
 Provide detailed, knowledgeable answers about ProSchool360 based on the available data. Follow these guidelines:
 
 🎯 RESPONSE STYLE:
-- ALWAYS respond in the SAME LANGUAGE as the user's question
+- AUTOMATICALLY detect the language of the user's question and respond in the EXACT SAME LANGUAGE
 - Support ALL languages worldwide (Hindi, English, Spanish, French, German, Arabic, Chinese, Japanese, Korean, Russian, etc.)
-- If asked in Hindi about ProSchool360, respond completely in Hindi
-- If asked in Spanish about ProSchool360, respond completely in Spanish
-- If asked in any other language about ProSchool360, respond in that language
+- If user asks in Hindi, respond completely in Hindi
+- If user asks in Spanish, respond completely in Spanish  
+- If user asks in any language, respond in that exact language
 - Provide step-by-step instructions when needed
 - Focus on ProSchool360-specific features and capabilities
 - Give practical examples and use cases
@@ -168,15 +166,13 @@ Answer comprehensively based on the ProSchool360 system data provided to help us
       try {
         console.log(`[${timestamp}] Using fallback mode - ChromaDB unavailable`);
         const contextInfo = await getEnhancedProSchool360Context(query);
-        const detectedLanguage = detectLanguage(query);
-        
         prompt = `You are an expert ProSchool360 assistant for the complete school management system at https://proschool360.com.
 
 ${contextInfo}
 
 User Question: ${query}
 
-🌐 LANGUAGE: Respond in the SAME language as the user's question. User asked in: ${detectedLanguage}
+🌐 LANGUAGE: AUTOMATICALLY detect the language of the user's question and respond in the EXACT SAME LANGUAGE
 
 Provide detailed and helpful answers as an experienced ProSchool360 guide. Focus on:
 
@@ -202,7 +198,7 @@ Provide detailed and helpful answers as an experienced ProSchool360 guide. Focus
 - Time-saving features
 - Troubleshooting guidance
 
-🚫 IMPORTANT: ALWAYS respond in the same language as the user's question (${detectedLanguage}).
+🚫 IMPORTANT: AUTOMATICALLY detect and respond in the same language as the user's question.
 
 Provide ProSchool360-specific and practical advice to help users effectively use the system.`;
       } catch (fallbackError) {
@@ -211,16 +207,15 @@ Provide ProSchool360-specific and practical advice to help users effectively use
           stack: fallbackError.stack
         });
         
-        const detectedLanguage = detectLanguage(query);
         prompt = `You are a ProSchool360 assistant. The user asked: "${query}"
 
-🌐 LANGUAGE: Respond in ${detectedLanguage} (same as user's question)
+🌐 LANGUAGE: AUTOMATICALLY detect the language of the user's question and respond in the EXACT SAME LANGUAGE
 
 ProSchool360 is a comprehensive school management system available at https://proschool360.com.
 
-If this question is about ProSchool360 features like student management, teacher management, fees, attendance, exams, or other school operations, provide helpful guidance in ${detectedLanguage}.
+If this question is about ProSchool360 features like student management, teacher management, fees, attendance, exams, or other school operations, provide helpful guidance in the user's language.
 
-If this question is not related to ProSchool360 or school management, politely explain in ${detectedLanguage} that you specialize in ProSchool360 assistance and suggest they ask about school management topics.`;
+If this question is not related to ProSchool360 or school management, politely explain in the user's language that you specialize in ProSchool360 assistance and suggest they ask about school management topics.`;
       }
     }
 
@@ -335,70 +330,7 @@ If this question is not related to ProSchool360 or school management, politely e
   }
 });
 
-// Enhanced language detection for worldwide support
-function detectLanguage(query) {
-  try {
-    // Unicode ranges for different scripts
-    const scriptRanges = {
-      'Hindi': /[\u0900-\u097F]/,
-      'Arabic': /[\u0600-\u06FF]/,
-      'Chinese': /[\u4e00-\u9fff]/,
-      'Japanese': /[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]/,
-      'Korean': /[\uac00-\ud7af]/,
-      'Russian': /[\u0400-\u04FF]/,
-      'Greek': /[\u0370-\u03FF]/,
-      'Thai': /[\u0e00-\u0e7f]/,
-      'Bengali': /[\u0980-\u09FF]/,
-      'Tamil': /[\u0B80-\u0BFF]/,
-      'Telugu': /[\u0C00-\u0C7F]/,
-      'Gujarati': /[\u0A80-\u0AFF]/,
-      'Punjabi': /[\u0A00-\u0A7F]/,
-      'Malayalam': /[\u0D00-\u0D7F]/,
-      'Kannada': /[\u0C80-\u0CFF]/,
-      'Oriya': /[\u0B00-\u0B7F]/,
-      'Urdu': /[\u0600-\u06FF]/,
-      'Persian': /[\u0600-\u06FF]/,
-      'Hebrew': /[\u0590-\u05FF]/,
-      'Vietnamese': /[\u1EA0-\u1EF9]/
-    };
-    
-    // Check for specific script patterns
-    for (const [language, pattern] of Object.entries(scriptRanges)) {
-      if (pattern.test(query)) {
-        return language;
-      }
-    }
-    
-    // Common words detection for major languages
-    const languageKeywords = {
-      'Hindi': ['कैसे', 'क्या', 'कहाँ', 'कब', 'क्यों', 'में', 'का', 'की', 'के', 'है', 'हैं', 'था', 'थी', 'थे', 'होगा', 'होगी', 'होंगे', 'छात्र', 'विद्यार्थी', 'स्कूल', 'शिक्षक', 'फीस'],
-      'Spanish': ['cómo', 'qué', 'dónde', 'cuándo', 'por qué', 'estudiante', 'profesor', 'escuela', 'clase', 'examen'],
-      'French': ['comment', 'quoi', 'où', 'quand', 'pourquoi', 'étudiant', 'professeur', 'école', 'classe', 'examen'],
-      'German': ['wie', 'was', 'wo', 'wann', 'warum', 'student', 'lehrer', 'schule', 'klasse', 'prüfung'],
-      'Portuguese': ['como', 'que', 'onde', 'quando', 'por que', 'estudante', 'professor', 'escola', 'classe', 'exame'],
-      'Italian': ['come', 'cosa', 'dove', 'quando', 'perché', 'studente', 'insegnante', 'scuola', 'classe', 'esame'],
-      'Russian': ['как', 'что', 'где', 'когда', 'почему', 'студент', 'учитель', 'школа', 'класс', 'экзамен'],
-      'Japanese': ['どう', 'なに', 'どこ', 'いつ', 'なぜ', '学生', '先生', '学校', 'クラス', '試験'],
-      'Korean': ['어떻게', '무엇', '어디', '언제', '왜', '학생', '선생님', '학교', '수업', '시험'],
-      'Arabic': ['كيف', 'ماذا', 'أين', 'متى', 'لماذا', 'طالب', 'معلم', 'مدرسة', 'فصل', 'امتحان']
-    };
-    
-    const queryLower = query.toLowerCase();
-    
-    // Check for language-specific keywords
-    for (const [language, keywords] of Object.entries(languageKeywords)) {
-      if (keywords.some(keyword => queryLower.includes(keyword.toLowerCase()))) {
-        return language;
-      }
-    }
-    
-    // Default to English if no specific language detected
-    return 'English';
-  } catch (error) {
-    console.error('Language detection error:', error.message);
-    return 'English';
-  }
-}
+
 
 // Helper function to check if query is about ProSchool360
 function isProSchool360Query(query, context = '') {
