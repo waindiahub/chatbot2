@@ -1,0 +1,14 @@
+[Unit]
+Description=ChromaDB Server
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/www/wwwroot/proschool360.com/chatbot
+ExecStart=chromadb run --path ./chroma_db --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
