@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "chromadb": "node chromadb-server.js",
     "build:local": "node build_chromadb_node.js"
   },
   "dependencies": {
