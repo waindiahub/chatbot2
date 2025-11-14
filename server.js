@@ -80,7 +80,7 @@ app.post('/api/chat', async (req, res) => {
     if (!chromaAvailable) {
       // Fallback mode - use corpus data directly
       const contextInfo = await getProSchool360Context(query);
-      prompt = `You are a ProSchool360 assistant. Based on the ProSchool360 system at https://proschool360.com:\n\n${contextInfo}\n\nQuestion: ${query}\n\nProvide user-friendly instructions for ProSchool360. Focus on navigation paths and what users need to do, not technical implementation details.`;
+      prompt = `You are a helpful ProSchool360 assistant for the school management system at https://proschool360.com.\n\n${contextInfo}\n\nUser Question: ${query}\n\nProvide clear, step-by-step instructions for ProSchool360 users. Focus on:\n- How to navigate the system\n- What buttons/menus to click\n- What information to enter\n- Practical user guidance\n\nDo NOT mention technical details like file paths, controllers, or code. Give friendly, practical answers that help users accomplish their tasks.`;
     }
 
     // Call Gemini API
@@ -118,25 +118,50 @@ async function getProSchool360Context(query) {
     const fs = require('fs').promises;
     const corpus = JSON.parse(await fs.readFile('./proschool360_corpus.json', 'utf8'));
     
-    // Search for relevant content in corpus
+    // Search for relevant functionality in views and controllers
     const searchTerms = query.toLowerCase().split(' ');
     const relevantFiles = corpus.filter(file => {
+      // Focus on views, controllers, and meaningful content
+      if (file.path.includes('index.html') || file.path.includes('.htaccess') || file.path.includes('config/')) {
+        return false;
+      }
+      
       const content = file.content.toLowerCase();
-      return searchTerms.some(term => content.includes(term));
-    }).slice(0, 3);
+      const path = file.path.toLowerCase();
+      
+      // Look for relevant functionality
+      return searchTerms.some(term => {
+        return content.includes(term) || path.includes(term);
+      }) && (path.includes('views/') || path.includes('controllers/') || content.includes('translate('));
+    }).slice(0, 5);
     
     if (relevantFiles.length > 0) {
-      const context = relevantFiles.map(file => {
-        const preview = file.content.substring(0, 500);
-        return `File: ${file.path}\n${preview}...`;
-      }).join('\n\n');
+      // Extract user-facing information
+      const userInfo = relevantFiles.map(file => {
+        let info = '';
+        const content = file.content;
+        
+        // Extract menu items, buttons, and user actions
+        const menuMatches = content.match(/translate\('([^']+)'\)/g) || [];
+        const buttonMatches = content.match(/btn[^>]*>([^<]+)</g) || [];
+        const linkMatches = content.match(/base_url\('([^']+)'\)/g) || [];
+        
+        if (menuMatches.length > 0) {
+          info += 'Menu items: ' + menuMatches.slice(0, 3).join(', ') + '\n';
+        }
+        if (linkMatches.length > 0) {
+          info += 'Navigation: ' + linkMatches.slice(0, 2).join(', ') + '\n';
+        }
+        
+        return info;
+      }).filter(info => info.length > 0).join('\n');
       
-      return `ProSchool360 System Information:\n\n${context}`;
+      return `ProSchool360 Features:\n\n${userInfo}\n\nWebsite: https://proschool360.com`;
     }
     
-    return 'ProSchool360 is a comprehensive school management system available at https://proschool360.com.';
+    return 'ProSchool360 is a comprehensive school management system available at https://proschool360.com. It includes features for student management, attendance, fees, reports, and more.';
   } catch (error) {
-    return 'ProSchool360 is a comprehensive school management system available at https://proschool360.com.';
+    return 'ProSchool360 is a comprehensive school management system available at https://proschool360.com. It includes features for student management, attendance, fees, reports, and more.';
   }
 }
 
