@@ -89,8 +89,37 @@ app.post('/api/chat', async (req, res) => {
       try {
         let documents = [];
         
-        // Use embedded ChromaDB collection
-        const chromaResults = await collection.query(query, 8);
+        // First, translate query to English for better ChromaDB search
+        let englishQuery = query;
+        try {
+          console.log(`[${timestamp}] Translating query to English for ChromaDB search...`);
+          const translateResponse = await axios.post(
+            'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+            {
+              contents: [{
+                parts: [{ text: `Translate this question to English for database search. Only return the English translation, nothing else: "${query}"` }]
+              }]
+            },
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'X-goog-api-key': process.env.GEMINI_API_KEY
+              },
+              timeout: 10000
+            }
+          );
+          
+          const translatedText = translateResponse.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (translatedText && translatedText.trim().length > 0) {
+            englishQuery = translatedText.trim();
+            console.log(`[${timestamp}] Query translated: "${query}" -> "${englishQuery}"`);
+          }
+        } catch (translateError) {
+          console.log(`[${timestamp}] Translation failed, using original query:`, translateError.message);
+        }
+        
+        // Use embedded ChromaDB collection with English query
+        const chromaResults = await collection.query(englishQuery, 8);
         documents = chromaResults.documents[0] || [];
         
         if (documents.length === 0) {
@@ -105,20 +134,22 @@ app.post('/api/chat', async (req, res) => {
         
         prompt = `You are a ProSchool360 expert assistant for the comprehensive school management system at https://proschool360.com.
 
-ProSchool360 System Context:
+ProSchool360 System Context (English data from database):
 ${context}
 
-User Question: ${query}
+Original User Question: ${query}
+English Translation Used for Search: ${englishQuery}
 Is ProSchool360 Related: ${isProSchoolQuery}
 
-Provide detailed, knowledgeable answers about ProSchool360 based on the available data. Follow these guidelines:
+IMPORTANT INSTRUCTIONS:
+1. The database context above is in English, but you must respond in the SAME LANGUAGE as the original user question
+2. Use the English context data to understand ProSchool360 features, then explain everything in the user's language
+3. AUTOMATICALLY detect the language of the original user question and respond in that EXACT SAME LANGUAGE
 
 🎯 RESPONSE STYLE:
-- AUTOMATICALLY detect the language of the user's question and respond in the EXACT SAME LANGUAGE
-- Support ALL languages worldwide (Hindi, English, Spanish, French, German, Arabic, Chinese, Japanese, Korean, Russian, etc.)
-- If user asks in Hindi, respond completely in Hindi
-- If user asks in Spanish, respond completely in Spanish  
-- If user asks in any language, respond in that exact language
+- AUTOMATICALLY detect the language of the original user question: "${query}"
+- Respond completely in that detected language (Hindi, Spanish, French, German, Arabic, Chinese, Japanese, Korean, Russian, etc.)
+- Use the English database context to provide accurate information, but translate your response to user's language
 - Provide step-by-step instructions when needed
 - Focus on ProSchool360-specific features and capabilities
 - Give practical examples and use cases
@@ -166,13 +197,49 @@ Answer comprehensively based on the ProSchool360 system data provided to help us
       try {
         console.log(`[${timestamp}] Using fallback mode - ChromaDB unavailable`);
         const contextInfo = await getEnhancedProSchool360Context(query);
+        // First, translate query to English for better context search
+        let englishQuery = query;
+        try {
+          console.log(`[${timestamp}] Translating query to English for context search...`);
+          const translateResponse = await axios.post(
+            'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+            {
+              contents: [{
+                parts: [{ text: `Translate this question to English for database search. Only return the English translation, nothing else: "${query}"` }]
+              }]
+            },
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'X-goog-api-key': process.env.GEMINI_API_KEY
+              },
+              timeout: 10000
+            }
+          );
+          
+          const translatedText = translateResponse.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (translatedText && translatedText.trim().length > 0) {
+            englishQuery = translatedText.trim();
+            console.log(`[${timestamp}] Query translated for context: "${query}" -> "${englishQuery}"`);
+          }
+        } catch (translateError) {
+          console.log(`[${timestamp}] Translation failed, using original query:`, translateError.message);
+        }
+        
+        const contextInfo = await getEnhancedProSchool360Context(englishQuery);
+        
         prompt = `You are an expert ProSchool360 assistant for the complete school management system at https://proschool360.com.
 
+ProSchool360 System Context (English data from database):
 ${contextInfo}
 
-User Question: ${query}
+Original User Question: ${query}
+English Translation Used for Search: ${englishQuery}
 
-🌐 LANGUAGE: AUTOMATICALLY detect the language of the user's question and respond in the EXACT SAME LANGUAGE
+IMPORTANT INSTRUCTIONS:
+1. The database context above is in English, but you must respond in the SAME LANGUAGE as the original user question
+2. Use the English context data to understand ProSchool360 features, then explain everything in the user's language
+3. AUTOMATICALLY detect the language of the original user question and respond in that EXACT SAME LANGUAGE
 
 Provide detailed and helpful answers as an experienced ProSchool360 guide. Focus on:
 
@@ -207,15 +274,20 @@ Provide ProSchool360-specific and practical advice to help users effectively use
           stack: fallbackError.stack
         });
         
-        prompt = `You are a ProSchool360 assistant. The user asked: "${query}"
+        prompt = `You are a ProSchool360 assistant. 
 
-🌐 LANGUAGE: AUTOMATICALLY detect the language of the user's question and respond in the EXACT SAME LANGUAGE
+Original User Question: "${query}"
+
+IMPORTANT INSTRUCTIONS:
+1. AUTOMATICALLY detect the language of the original user question: "${query}"
+2. Respond completely in that detected language
+3. Use your knowledge of ProSchool360 features to provide helpful guidance
 
 ProSchool360 is a comprehensive school management system available at https://proschool360.com.
 
-If this question is about ProSchool360 features like student management, teacher management, fees, attendance, exams, or other school operations, provide helpful guidance in the user's language.
+If this question is about ProSchool360 features like student management, teacher management, fees, attendance, exams, or other school operations, provide helpful guidance in the user's original language.
 
-If this question is not related to ProSchool360 or school management, politely explain in the user's language that you specialize in ProSchool360 assistance and suggest they ask about school management topics.`;
+If this question is not related to ProSchool360 or school management, politely explain in the user's original language that you specialize in ProSchool360 assistance and suggest they ask about school management topics.`;
       }
     }
 
