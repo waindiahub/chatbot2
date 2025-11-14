@@ -150,37 +150,44 @@ function buildAdvancedPrompt(query, englishQuery, context, analysis, contextInfo
 - Detected Language: ${analysis.language}
 - Key Entities: ${analysis.entities.join(', ')}
 
-📚 PROSCHOOL360 CONTEXT:
+📚 PROSCHOOL360 CONTEXT (English data from database):
 ${context}
 
 ❓ USER QUERY:
-Original: ${query}
-English Translation: ${englishQuery}
+Original Query in ${analysis.language}: ${query}
+English Translation for Search: ${englishQuery}
+
+🌐 CRITICAL LANGUAGE INSTRUCTION:
+- The user asked in ${analysis.language}
+- You MUST respond COMPLETELY in ${analysis.language}
+- DO NOT respond in English
+- Use the English context above to understand ProSchool360 features, then translate your entire response to ${analysis.language}
+- If user asked in Hindi/Hinglish, respond completely in Hindi
+- If user asked in Spanish, respond completely in Spanish
+- If user asked in any other language, respond completely in that language
 
 🎯 RESPONSE STRATEGY:
 ${complexityInstructions[analysis.complexity]}
 ${categorySpecificGuidance[analysis.category] || 'Provide comprehensive ProSchool360 guidance.'}
 
-🌐 LANGUAGE INSTRUCTION:
-Respond in ${analysis.language} (same as user's question). Use natural, conversational tone.
-
 📋 ADVANCED CONTENT GUIDELINES:
-- Start with acknowledgment in user's language
-- Provide numbered steps with clear headings
-- Include navigation paths (Dashboard → Module → Feature)
-- Add practical examples and use cases
-- Mention related features and workflows
-- Include troubleshooting tips for complex queries
+- Start with acknowledgment in ${analysis.language}
+- Provide numbered steps with clear headings in ${analysis.language}
+- Include navigation paths in ${analysis.language}
+- Add practical examples in ${analysis.language}
+- Mention related features and workflows in ${analysis.language}
+- Include troubleshooting tips for complex queries in ${analysis.language}
 - Skip branch-related terminology
 - Use emojis for better readability
 
 🚫 RESTRICTIONS:
 - Only answer ProSchool360-related questions
-- Maintain professional yet friendly tone
+- NEVER respond in English if user asked in another language
+- Maintain professional yet friendly tone in user's language
 - Avoid technical jargon
 - Focus on practical implementation
 
-Provide expert-level guidance that helps users master ProSchool360 effectively.`;
+Provide expert-level guidance in ${analysis.language} that helps users master ProSchool360 effectively.`;
 }
 
 // Chat endpoint with comprehensive error handling
@@ -286,10 +293,19 @@ ${enhancedContext}
 Original User Question: ${query}
 English Translation Used for Search: ${englishQuery}
 
+🌐 CRITICAL LANGUAGE INSTRUCTION:
+- The user asked their question in a specific language
+- You MUST respond COMPLETELY in the SAME LANGUAGE as the original user question
+- DO NOT respond in English unless the user asked in English
+- Use the English context above to understand ProSchool360 features, then translate your ENTIRE response to the user's original language
+
 IMPORTANT INSTRUCTIONS:
-1. The database context above is in English, but you must respond in the SAME LANGUAGE as the original user question
-2. Use the English context data to understand ProSchool360 features, then explain everything in the user's language
+1. The database context above is in English, but you must respond in the SAME LANGUAGE as the original user question: "${query}"
+2. Use the English context data to understand ProSchool360 features, then explain everything in the user's original language
 3. AUTOMATICALLY detect the language of the original user question and respond in that EXACT SAME LANGUAGE
+4. If the user asked in Hindi/Hinglish, respond completely in Hindi
+5. If the user asked in Spanish, respond completely in Spanish
+6. If the user asked in any other language, respond completely in that language
 
 Provide detailed and helpful answers as an experienced ProSchool360 guide. Focus on:
 
@@ -332,10 +348,16 @@ Provide ProSchool360-specific and practical advice to help users effectively use
 
 Original User Question: "${query}"
 
+🌐 CRITICAL LANGUAGE INSTRUCTION:
+- The user asked their question in a specific language
+- You MUST respond COMPLETELY in the SAME LANGUAGE as the user's question
+- DO NOT respond in English unless the user asked in English
+- Detect the language and respond in that exact language
+
 IMPORTANT INSTRUCTIONS:
 1. AUTOMATICALLY detect the language of the original user question: "${query}"
-2. Respond completely in that detected language
-3. Use your knowledge of ProSchool360 features to provide helpful guidance
+2. Respond completely in that detected language (Hindi, Spanish, French, German, Arabic, Chinese, Japanese, etc.)
+3. Use your knowledge of ProSchool360 features to provide helpful guidance in the user's language
 
 ProSchool360 is a comprehensive school management system available at https://proschool360.com.
 
