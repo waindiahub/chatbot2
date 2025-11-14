@@ -127,7 +127,7 @@ app.post('/api/chat', async (req, res) => {
           chromaAvailable = false;
         } else {
           const context = documents.slice(0, 8).join('\n\n');
-          const suggestedUrls = generateRelevantSidebarLinks(englishQuery, context);
+
           
           // Detect if question is about ProSchool360
         const isProSchoolQuery = isProSchool360Query(query, context);
@@ -180,10 +180,6 @@ IMPORTANT INSTRUCTIONS:
 - If NOT about ProSchool360, politely redirect to ProSchool360 topics in the user's language
 - ALWAYS respond in the same language as the user's question
 - Skip any branch-related information
-
-🔗 IMPORTANT: Always end your response with relevant ProSchool360 sidebar navigation links:
-**Relevant Links:**
-${suggestedUrls.map(url => `• ${url}`).join('\n')}
 
 Answer comprehensively based on the ProSchool360 system data provided to help users effectively use the system.`;
           
@@ -395,7 +391,7 @@ If this question is not related to ProSchool360 or school management, politely e
     res.json({ 
       reply,
       mode: chromaAvailable ? 'embedded_chromadb' : 'enhanced_corpus_search',
-      suggestedUrls: res.locals.chromaResults ? res.locals.chromaResults.suggestedUrls : generateRelevantSidebarLinks(query, ''),
+      suggestedUrls: ['https://proschool360.com'],
       timestamp
     });
 
@@ -417,86 +413,6 @@ If this question is not related to ProSchool360 or school management, politely e
 });
 
 
-
-// Function to generate relevant sidebar.php navigation links
-function generateRelevantSidebarLinks(query, context = '') {
-  const queryLower = (query + ' ' + context).toLowerCase();
-  const links = [];
-  
-  // Student Management Links
-  if (queryLower.includes('student') || queryLower.includes('admission') || queryLower.includes('enrollment')) {
-    links.push('https://proschool360.com/student/admission');
-    links.push('https://proschool360.com/student/list');
-    links.push('https://proschool360.com/student/profile');
-  }
-  
-  // Attendance Links
-  if (queryLower.includes('attendance') || queryLower.includes('present') || queryLower.includes('absent')) {
-    links.push('https://proschool360.com/attendance/student');
-    links.push('https://proschool360.com/attendance/employee');
-    links.push('https://proschool360.com/attendance/qr-code');
-    links.push('https://proschool360.com/attendance/report');
-  }
-  
-  // Fee Management Links
-  if (queryLower.includes('fee') || queryLower.includes('payment') || queryLower.includes('invoice')) {
-    links.push('https://proschool360.com/fees/collection');
-    links.push('https://proschool360.com/fees/structure');
-    links.push('https://proschool360.com/fees/report');
-  }
-  
-  // Teacher/Staff Links
-  if (queryLower.includes('teacher') || queryLower.includes('staff') || queryLower.includes('employee')) {
-    links.push('https://proschool360.com/staff/list');
-    links.push('https://proschool360.com/staff/profile');
-    links.push('https://proschool360.com/staff/attendance');
-  }
-  
-  // Exam Links
-  if (queryLower.includes('exam') || queryLower.includes('test') || queryLower.includes('result') || queryLower.includes('grade')) {
-    links.push('https://proschool360.com/exam/schedule');
-    links.push('https://proschool360.com/exam/result');
-    links.push('https://proschool360.com/exam/report');
-  }
-  
-  // Class Management Links
-  if (queryLower.includes('class') || queryLower.includes('section') || queryLower.includes('subject')) {
-    links.push('https://proschool360.com/academic/class');
-    links.push('https://proschool360.com/academic/section');
-    links.push('https://proschool360.com/academic/subject');
-  }
-  
-  // QR Code Links
-  if (queryLower.includes('qr') || queryLower.includes('code') || queryLower.includes('scan')) {
-    links.push('https://proschool360.com/qr-attendance/take');
-    links.push('https://proschool360.com/qr-attendance/settings');
-    links.push('https://proschool360.com/qr-attendance/report');
-  }
-  
-  // Reports Links
-  if (queryLower.includes('report') || queryLower.includes('analytics') || queryLower.includes('dashboard')) {
-    links.push('https://proschool360.com/reports/student');
-    links.push('https://proschool360.com/reports/attendance');
-    links.push('https://proschool360.com/reports/fees');
-  }
-  
-  // Communication Links
-  if (queryLower.includes('sms') || queryLower.includes('message') || queryLower.includes('notification')) {
-    links.push('https://proschool360.com/communication/sms');
-    links.push('https://proschool360.com/communication/email');
-    links.push('https://proschool360.com/communication/notification');
-  }
-  
-  // Default links if no specific match
-  if (links.length === 0) {
-    links.push('https://proschool360.com/dashboard');
-    links.push('https://proschool360.com/student/admission');
-    links.push('https://proschool360.com/attendance/student');
-  }
-  
-  // Remove duplicates and return unique links
-  return [...new Set(links)];
-}
 
 // Helper function to check if query is about ProSchool360
 function isProSchool360Query(query, context = '') {
