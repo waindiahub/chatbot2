@@ -2,6 +2,16 @@ services:
   - type: web
     name: chatbot
     env: node
-    buildCommand: npm install
-    startCommand: npm start
+    buildCommand: |
+      npm install
+      pip install chromadb
+    startCommand: |
+      chromadb run --path ./chroma_db --host 0.0.0.0 --port 8000 &
+      sleep 5
+      node server.js
     autoDeploy: false
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: CHROMADB_URL
+        value: http://localhost:8000
