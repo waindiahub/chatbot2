@@ -51,6 +51,138 @@ app.get('/api/chat', (req, res) => {
   });
 });
 
+// Advanced query analysis function
+async function analyzeQuery(query, timestamp) {
+  try {
+    const analysisResponse = await axios.post(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+      {
+        contents: [{
+          parts: [{ text: `Analyze this ProSchool360 query and return JSON with: {"intent": "primary_intent", "entities": ["entity1", "entity2"], "complexity": "simple|medium|complex", "language": "detected_language", "category": "student|teacher|fee|attendance|exam|report|other"}: "${query}"` }]
+        }]
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-goog-api-key': process.env.GEMINI_API_KEY
+        },
+        timeout: 8000
+      }
+    );
+    
+    const analysisText = analysisResponse.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    try {
+      return JSON.parse(analysisText);
+    } catch {
+      return { intent: 'general', entities: [], complexity: 'medium', language: 'English', category: 'other' };
+    }
+  } catch (error) {
+    console.log(`[${timestamp}] Query analysis failed:`, error.message);
+    return { intent: 'general', entities: [], complexity: 'medium', language: 'English', category: 'other' };
+  }
+}
+
+// Enhanced context retrieval with smart ranking
+async function getSmartContext(query, englishQuery, analysis, timestamp) {
+  try {
+    // Adjust search parameters based on complexity
+    const searchCount = analysis.complexity === 'complex' ? 12 : analysis.complexity === 'medium' ? 8 : 5;
+    
+    // Use category-specific search terms
+    const categoryKeywords = {
+      'student': ['admission', 'enrollment', 'registration', 'student_profile'],
+      'teacher': ['staff', 'employee', 'teacher_profile', 'staff_management'],
+      'fee': ['payment', 'invoice', 'fee_collection', 'billing'],
+      'attendance': ['present', 'absent', 'attendance_report', 'tracking'],
+      'exam': ['test', 'result', 'grade', 'examination', 'marksheet'],
+      'report': ['analytics', 'dashboard', 'summary', 'statistics']
+    };
+    
+    const enhancedQuery = analysis.category !== 'other' ? 
+      englishQuery + ' ' + (categoryKeywords[analysis.category] || []).join(' ') : englishQuery;
+    
+    console.log(`[${timestamp}] Enhanced search query: "${enhancedQuery}"`);
+    
+    if (chromaAvailable) {
+      const chromaResults = await collection.query(enhancedQuery, searchCount);
+      return {
+        documents: chromaResults.documents[0] || [],
+        source: 'chromadb',
+        searchTerms: enhancedQuery
+      };
+    } else {
+      const fallbackContext = await getEnhancedProSchool360Context(enhancedQuery);
+      return {
+        documents: [fallbackContext],
+        source: 'fallback',
+        searchTerms: enhancedQuery
+      };
+    }
+  } catch (error) {
+    console.error(`[${timestamp}] Smart context retrieval failed:`, error.message);
+    return { documents: [], source: 'error', searchTerms: englishQuery };
+  }
+}
+
+// Advanced prompt engineering based on query analysis
+function buildAdvancedPrompt(query, englishQuery, context, analysis, contextInfo) {
+  const complexityInstructions = {
+    'simple': 'Provide a concise, direct answer with 2-3 key steps.',
+    'medium': 'Provide a comprehensive answer with detailed steps and examples.',
+    'complex': 'Provide an in-depth explanation with multiple approaches, best practices, and troubleshooting tips.'
+  };
+  
+  const categorySpecificGuidance = {
+    'student': 'Focus on student lifecycle: admission → enrollment → profile management → academic tracking.',
+    'teacher': 'Focus on staff management: registration → profile setup → role assignment → performance tracking.',
+    'fee': 'Focus on financial workflow: fee structure → collection → payment processing → reporting.',
+    'attendance': 'Focus on attendance workflow: daily marking → tracking → reporting → notifications.',
+    'exam': 'Focus on examination process: creation → scheduling → conduct → result processing → analysis.',
+    'report': 'Focus on analytics: data collection → report generation → insights → decision making.'
+  };
+  
+  return `You are an advanced ProSchool360 AI assistant with deep expertise in school management systems.
+
+🧠 QUERY ANALYSIS:
+- Intent: ${analysis.intent}
+- Category: ${analysis.category}
+- Complexity: ${analysis.complexity}
+- Detected Language: ${analysis.language}
+- Key Entities: ${analysis.entities.join(', ')}
+
+📚 PROSCHOOL360 CONTEXT:
+${context}
+
+❓ USER QUERY:
+Original: ${query}
+English Translation: ${englishQuery}
+
+🎯 RESPONSE STRATEGY:
+${complexityInstructions[analysis.complexity]}
+${categorySpecificGuidance[analysis.category] || 'Provide comprehensive ProSchool360 guidance.'}
+
+🌐 LANGUAGE INSTRUCTION:
+Respond in ${analysis.language} (same as user's question). Use natural, conversational tone.
+
+📋 ADVANCED CONTENT GUIDELINES:
+- Start with acknowledgment in user's language
+- Provide numbered steps with clear headings
+- Include navigation paths (Dashboard → Module → Feature)
+- Add practical examples and use cases
+- Mention related features and workflows
+- Include troubleshooting tips for complex queries
+- Skip branch-related terminology
+- Use emojis for better readability
+
+🚫 RESTRICTIONS:
+- Only answer ProSchool360-related questions
+- Maintain professional yet friendly tone
+- Avoid technical jargon
+- Focus on practical implementation
+
+Provide expert-level guidance that helps users master ProSchool360 effectively.`;
+}
+
 // Chat endpoint with comprehensive error handling
 app.post('/api/chat', async (req, res) => {
   const timestamp = new Date().toISOString();
@@ -83,151 +215,67 @@ app.post('/api/chat', async (req, res) => {
       });
     }
 
-    let prompt;
+    // Step 1: Advanced query analysis
+    console.log(`[${timestamp}] Analyzing query...`);
+    const analysis = await analyzeQuery(query, timestamp);
+    console.log(`[${timestamp}] Query analysis:`, analysis);
     
-    if (chromaAvailable) {
+    // Step 2: Smart translation for English search
+    let englishQuery = query;
+    if (analysis.language !== 'English') {
       try {
-        let documents = [];
-        
-        // First, translate query to English for better ChromaDB search
-        let englishQuery = query;
-        try {
-          console.log(`[${timestamp}] Translating query to English for ChromaDB search...`);
-          const translateResponse = await axios.post(
-            'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
-            {
-              contents: [{
-                parts: [{ text: `Translate this question to English for database search. Only return the English translation, nothing else: "${query}"` }]
-              }]
+        console.log(`[${timestamp}] Translating ${analysis.language} query to English...`);
+        const translateResponse = await axios.post(
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+          {
+            contents: [{
+              parts: [{ text: `Translate this ${analysis.language} question to English for database search. Only return the English translation: "${query}"` }]
+            }]
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'X-goog-api-key': process.env.GEMINI_API_KEY
             },
-            {
-              headers: {
-                'Content-Type': 'application/json',
-                'X-goog-api-key': process.env.GEMINI_API_KEY
-              },
-              timeout: 10000
-            }
-          );
-          
-          const translatedText = translateResponse.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (translatedText && translatedText.trim().length > 0) {
-            englishQuery = translatedText.trim();
-            console.log(`[${timestamp}] Query translated: "${query}" -> "${englishQuery}"`);
+            timeout: 8000
           }
-        } catch (translateError) {
-          console.log(`[${timestamp}] Translation failed, using original query:`, translateError.message);
+        );
+        
+        const translatedText = translateResponse.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (translatedText && translatedText.trim().length > 0) {
+          englishQuery = translatedText.trim();
+          console.log(`[${timestamp}] Smart translation: "${query}" -> "${englishQuery}"`);
         }
-        
-        // Use embedded ChromaDB collection with English query
-        const chromaResults = await collection.query(englishQuery, 8);
-        documents = chromaResults.documents[0] || [];
-        
-        if (documents.length === 0) {
-          // If no documents found in ChromaDB, fall back to enhanced corpus search
-          chromaAvailable = false;
-        } else {
-          const context = documents.slice(0, 8).join('\n\n');
-
-          
-          // Detect if question is about ProSchool360
-        const isProSchoolQuery = isProSchool360Query(query, context);
-        
-        prompt = `You are a ProSchool360 expert assistant for the comprehensive school management system at https://proschool360.com.
-
-ProSchool360 System Context (English data from database):
-${context}
-
-Original User Question: ${query}
-English Translation Used for Search: ${englishQuery}
-Is ProSchool360 Related: ${isProSchoolQuery}
-
-IMPORTANT INSTRUCTIONS:
-1. The database context above is in English, but you must respond in the SAME LANGUAGE as the original user question
-2. Use the English context data to understand ProSchool360 features, then explain everything in the user's language
-3. AUTOMATICALLY detect the language of the original user question and respond in that EXACT SAME LANGUAGE
-
-🎯 RESPONSE STYLE:
-- AUTOMATICALLY detect the language of the original user question: "${query}"
-- Respond completely in that detected language (Hindi, Spanish, French, German, Arabic, Chinese, Japanese, Korean, Russian, etc.)
-- Use the English database context to provide accurate information, but translate your response to user's language
-- Provide step-by-step instructions when needed
-- Focus on ProSchool360-specific features and capabilities
-- Give practical examples and use cases
-
-📋 CONTENT FOCUS:
-- Explain navigation paths and menu locations (e.g., "Dashboard → Student Management → Add Student")
-- Highlight required fields and important settings
-- Share best practices and helpful tips
-- Address common issues and their solutions
-- Provide step-by-step instructions with numbered lists
-- Include relevant sidebar navigation routes
-
-🚫 AVOID:
-- Technical file paths or code references
-- Controller names or database details
-- Generic school management advice (stay ProSchool360-specific)
-- Using "Branch" terminology - skip branch-related fields
-- Mentioning "Branch (ब्रांच)" or similar branch references
-
-💡 HELPFUL ADDITIONS:
-- Suggest related features
-- Provide workflow tips
-- Share time-saving shortcuts
-- Include relevant sidebar.php route links
-
-🚫 IMPORTANT RESTRICTIONS:
-- ONLY answer if the question is about ProSchool360 school management features
-- If NOT about ProSchool360, politely redirect to ProSchool360 topics in the user's language
-- ALWAYS respond in the same language as the user's question
-- Skip any branch-related information
-
-Answer comprehensively based on the ProSchool360 system data provided to help users effectively use the system.`;
-          
-          // Store results for response
-          res.locals.chromaResults = chromaResults;
-        }
-        
-
-      } catch (error) {
-        console.error('ChromaDB query failed:', error.message);
-        chromaAvailable = false;
+      } catch (translateError) {
+        console.log(`[${timestamp}] Translation failed:`, translateError.message);
       }
     }
     
+    // Step 3: Smart context retrieval
+    console.log(`[${timestamp}] Retrieving smart context...`);
+    const contextInfo = await getSmartContext(query, englishQuery, analysis, timestamp);
+    
+    let prompt;
+    if (contextInfo.documents.length > 0) {
+      const context = Array.isArray(contextInfo.documents) ? 
+        contextInfo.documents.join('\n\n') : contextInfo.documents;
+      
+      console.log(`[${timestamp}] Context retrieved from ${contextInfo.source}, ${contextInfo.documents.length} documents`);
+      
+      // Step 4: Build advanced prompt
+      prompt = buildAdvancedPrompt(query, englishQuery, context, analysis, contextInfo);
+      
+      // Store context info for response
+      res.locals.contextInfo = contextInfo;
+    } else {
+      console.log(`[${timestamp}] No context found, using fallback`);
+      chromaAvailable = false;
+    }
+    
     if (!chromaAvailable) {
-      // Enhanced fallback mode with better context
+      // Advanced fallback mode
       try {
-        console.log(`[${timestamp}] Using fallback mode - ChromaDB unavailable`);
-        const contextInfo = await getEnhancedProSchool360Context(query);
-        // First, translate query to English for better context search
-        let englishQuery = query;
-        try {
-          console.log(`[${timestamp}] Translating query to English for context search...`);
-          const translateResponse = await axios.post(
-            'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
-            {
-              contents: [{
-                parts: [{ text: `Translate this question to English for database search. Only return the English translation, nothing else: "${query}"` }]
-              }]
-            },
-            {
-              headers: {
-                'Content-Type': 'application/json',
-                'X-goog-api-key': process.env.GEMINI_API_KEY
-              },
-              timeout: 10000
-            }
-          );
-          
-          const translatedText = translateResponse.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (translatedText && translatedText.trim().length > 0) {
-            englishQuery = translatedText.trim();
-            console.log(`[${timestamp}] Query translated for context: "${query}" -> "${englishQuery}"`);
-          }
-        } catch (translateError) {
-          console.log(`[${timestamp}] Translation failed, using original query:`, translateError.message);
-        }
-        
+        console.log(`[${timestamp}] Using advanced fallback mode`);
         const enhancedContext = await getEnhancedProSchool360Context(englishQuery);
         
         prompt = `You are an expert ProSchool360 assistant for the complete school management system at https://proschool360.com.
@@ -392,6 +440,13 @@ If this question is not related to ProSchool360 or school management, politely e
       reply,
       mode: chromaAvailable ? 'embedded_chromadb' : 'enhanced_corpus_search',
       suggestedUrls: ['https://proschool360.com'],
+      analysis: {
+        intent: res.locals.contextInfo?.analysis?.intent || 'general',
+        category: res.locals.contextInfo?.analysis?.category || 'other',
+        complexity: res.locals.contextInfo?.analysis?.complexity || 'medium',
+        language: res.locals.contextInfo?.analysis?.language || 'English'
+      },
+      contextSource: res.locals.contextInfo?.source || 'fallback',
       timestamp
     });
 
