@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const { ChromaClient } = require('chromadb');
 require('dotenv').config();
 
 const app = express();
@@ -9,6 +10,18 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 app.use(express.static('.'));
+
+// Initialize ChromaDB client
+let collection;
+async function initChroma() {
+  try {
+    const client = new ChromaClient({ path: './chroma_db' });
+    collection = await client.getCollection({ name: 'proschool360' });
+    console.log('ChromaDB connected successfully');
+  } catch (error) {
+    console.error('ChromaDB connection failed:', error.message);
+  }
+}
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -24,13 +37,17 @@ app.post('/api/chat', async (req, res) => {
       return res.status(400).json({ error: 'Query parameter required' });
     }
 
-    // Query ChromaDB
-    const chromaResponse = await axios.post(`${process.env.CHROMADB_URL}/api/v1/collections/proschool360/query`, {
-      query_texts: [query],
-      n_results: 5
+    if (!collection) {
+      return res.status(500).json({ error: 'ChromaDB not available' });
+    }
+
+    // Query ChromaDB directly
+    const results = await collection.query({
+      queryTexts: [query],
+      nResults: 5
     });
 
-    const documents = chromaResponse.data.documents[0] || [];
+    const documents = results.documents[0] || [];
     const context = documents.slice(0, 5).join('\n\n');
 
     // Build prompt
@@ -62,6 +79,9 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Initialize ChromaDB and start server
+initChroma().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
 });
