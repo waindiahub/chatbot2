@@ -1,95 +1,177 @@
-# ProSchool360 Chatbot
+# 🎓 ProSchool360 AI Assistant
 
-A complete chatbot system that indexes your ProSchool360 codebase and provides AI-powered answers using ChromaDB and Gemini API.
+एक advanced chatbot system जो आपके ProSchool360 codebase को index करता है और ChromaDB + Gemini AI का उपयोग करके intelligent, user-friendly responses देता है।
 
-## Setup Instructions
+## ✨ Key Features
 
-### 1. Install Python Dependencies
+- 🧠 **Intelligent Responses**: ChromaDB-powered context-aware answers
+- 🌐 **Bilingual Support**: Hindi और English दोनों में responses
+- 📚 **ProSchool360 Expert**: Complete school management system knowledge
+- 🎯 **User-Friendly**: Technical details को avoid करके practical guidance देता है
+- 🚀 **Fast & Reliable**: Embedded ChromaDB for quick responses
+- 📱 **Modern UI**: Beautiful, responsive chat interface
+
+## 🚀 Quick Setup
+
+### 1. Install Dependencies
 ```bash
-cd /www/wwwroot/proschool360.com/chatbot
-pip install -r requirements.txt
+npm install
 ```
 
-### 2. Build JSON Corpus
-Scan the project and create the corpus file:
+### 2. Configure Environment
+Copy `.env.example` to `.env` and add your Gemini API key:
 ```bash
-python build_json.py
-```
-This creates `proschool360_corpus.json` with all project files (excluding .sql, .md, ProSchoolApp, and chatbot folders).
-
-### 3. Build ChromaDB
-Create the vector database:
-```bash
-python build_chromadb.py
-```
-This creates the `chroma_db` folder with indexed documents.
-
-### 4. Start ChromaDB Server
-
-#### Option A: Manual Start
-```bash
-chmod +x start_chromadb.sh
-./start_chromadb.sh
+cp .env.example .env
 ```
 
-#### Option B: Systemd Service (Auto-start)
-```bash
-# Copy service file
-sudo cp chromadb.service /etc/systemd/system/
-
-# Enable and start service
-sudo systemctl daemon-reload
-sudo systemctl enable chromadb.service
-sudo systemctl start chromadb.service
-
-# Check status
-sudo systemctl status chromadb.service
+Edit `.env` file:
+```env
+GEMINI_API_KEY=your_actual_gemini_api_key_here
+PORT=3000
 ```
 
-### 5. Configure Gemini API
-Edit `api.php` and replace `YOUR_API_KEY` with your actual Gemini API key:
-```php
-$apiKey = 'your-actual-gemini-api-key';
+### 3. Start the Server
+```bash
+# For production
+npm start
+
+# For development (with auto-reload)
+npm run dev
 ```
 
-### 6. Test the System
+### 4. Access the Chatbot
 
-#### Test ChromaDB
+#### Web Interface
+Open your browser and go to:
+```
+http://localhost:3000
+```
+
+#### API Testing
 ```bash
-curl -X POST http://127.0.0.1:8000/api/v1/collections/proschool360/query \
+# Test the API endpoint
+curl -X POST http://localhost:3000/api/chat \
   -H "Content-Type: application/json" \
-  -d '{"query_texts": ["test"], "n_results": 1}'
+  -d '{"query": "How to add new student in ProSchool360?"}'
 ```
 
-#### Test API
+#### Health Check
 ```bash
-curl -X POST http://your-domain.com/chatbot/api.php \
-  -H "Content-Type: application/json" \
-  -d '{"query": "How does the authentication work?"}'
+curl http://localhost:3000/health
 ```
 
-#### Test Frontend
-Open `frontend.html` in your browser or access via web server.
-
-## File Structure
+## 📁 File Structure
 ```
-chatbot/
-├── build_json.py          # Scans project and builds JSON corpus
-├── build_chromadb.py      # Creates ChromaDB from JSON
-├── requirements.txt       # Python dependencies
-├── start_chromadb.sh      # Start ChromaDB server script
-├── chromadb.service       # Systemd service file
-├── api.php               # PHP API backend
-├── frontend.html         # Simple chat interface
-├── README.md             # This file
-├── proschool360_corpus.json  # Generated corpus file
-├── chroma_db/            # ChromaDB database folder
-└── chromadb.log          # Server logs
+chatbot2/
+├── server.js                    # Main Node.js server with enhanced AI
+├── package.json                 # Node.js dependencies
+├── index.html                   # Beautiful chat interface
+├── .env.example                 # Environment configuration template
+├── README.md                    # This documentation
+├── proschool360_corpus.json     # ProSchool360 knowledge base
+├── chroma_db/                   # Embedded ChromaDB database
+├── .gitignore                   # Git ignore rules
+├── Procfile                     # Deployment configuration
+└── render.yaml                  # Render deployment config
 ```
 
-## Troubleshooting
+## 🎯 Enhanced Features
 
-- **ChromaDB not starting**: Check `chromadb.log` for errors
-- **API errors**: Verify Gemini API key and ChromaDB server status
-- **Memory issues**: Reduce batch size in `build_chromadb.py`
-- **Permission errors**: Ensure proper file permissions for web server
+### Intelligent Response System
+- **Context-Aware**: ChromaDB से relevant ProSchool360 content retrieve करता है
+- **User-Friendly**: Technical jargon avoid करके practical guidance देता है
+- **Bilingual**: Hindi और English दोनों में natural responses
+- **Module-Specific**: Student, Teacher, Fee, Attendance आदि modules के लिए specialized knowledge
+
+### Advanced Query Processing
+- **Smart Keyword Mapping**: Query को relevant modules से match करता है
+- **Enhanced Context Extraction**: Controllers और views से meaningful information extract करता है
+- **Fallback Intelligence**: ChromaDB unavailable होने पर भी comprehensive responses देता है
+
+### Modern Chat Interface
+- **Responsive Design**: Mobile और desktop दोनों के लिए optimized
+- **Real-time Typing Indicators**: Professional chat experience
+- **Quick Suggestions**: Common queries के लिए ready-made buttons
+- **Beautiful UI**: Modern gradient design with smooth animations
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+**Server not starting:**
+```bash
+# Check if port is available
+netstat -tulpn | grep :3000
+
+# Kill process if needed
+kill -9 $(lsof -t -i:3000)
+```
+
+**ChromaDB errors:**
+- Ensure `chroma_db/` folder exists and has proper permissions
+- Check if `proschool360_corpus.json` is present and valid
+
+**API key issues:**
+- Verify your Gemini API key in `.env` file
+- Check API key permissions and quotas
+
+**Memory issues:**
+- Reduce ChromaDB query results from 8 to 5 in server.js
+- Monitor server memory usage
+
+### Performance Tips
+
+1. **For better responses**: Ensure ChromaDB is working properly
+2. **For faster startup**: Keep corpus file optimized
+3. **For production**: Set `NODE_ENV=production` in `.env`
+
+## 🚀 Deployment
+
+### Render Deployment
+The project is configured for easy Render deployment:
+
+1. Connect your GitHub repository to Render
+2. Set environment variables in Render dashboard
+3. Deploy automatically with included `render.yaml`
+
+### Environment Variables
+```env
+GEMINI_API_KEY=your_gemini_api_key
+PORT=3000
+NODE_ENV=production
+```
+
+## 🤝 Contributing
+
+To improve the chatbot:
+
+1. **Add more context**: Update `getEnhancedProSchool360Context()` function
+2. **Improve responses**: Modify the prompt engineering in `/api/chat` endpoint
+3. **Add features**: Extend the UI in `index.html`
+4. **Optimize performance**: Enhance ChromaDB queries
+
+## 🎨 Screenshots
+
+### Chat Interface
+The modern, responsive chat interface provides:
+- Clean, professional design
+- Bilingual support (Hindi/English)
+- Real-time typing indicators
+- Quick suggestion chips
+- Mobile-friendly responsive layout
+
+### AI Responses
+The enhanced AI provides:
+- ProSchool360-specific guidance
+- Step-by-step instructions
+- Module-wise feature explanations
+- User-friendly language (no technical jargon)
+- Contextual help based on actual codebase
+
+## 📞 Support
+
+For ProSchool360 related queries, visit: https://proschool360.com
+
+---
+
+**Made with ❤️ for ProSchool360 users**
