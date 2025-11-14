@@ -2,8 +2,12 @@ services:
   - type: web
     name: proschool360-chatbot
     env: node
-    buildCommand: npm install
+    buildCommand: |
+      npm cache clean --force
+      npm install --production
     startCommand: node server.js
     envVars:
       - key: GEMINI_API_KEY
         sync: false
+      - key: NODE_ENV
+        value: production
