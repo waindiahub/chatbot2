@@ -152,18 +152,16 @@ ProSchool360 Context (English data from database):
 ${context}
 
 User's Original Question: "${query}"
-Detected Language: ${userLanguage}
 
 IMPORTANT INSTRUCTIONS:
-1. The user asked in ${userLanguage}
-2. Respond ONLY in ${userLanguage} language
+1. Respond in the EXACT SAME LANGUAGE and STYLE as the user's question
+2. If user mixed languages, respond in the same mixed style
 3. Give COMPREHENSIVE, detailed answers with complete explanations
 4. Provide step-by-step navigation: Menu → Submenu → Action
 5. Include examples, tips, and additional helpful information
 6. Skip branch-related information
-7. Use clear, professional language
 
-Provide comprehensive ProSchool360 guidance in ${userLanguage} with detailed explanations.`;
+Respond in the same language and style as: "${query}"`;
     } else {
       chromaAvailable = false;
     }
@@ -180,18 +178,16 @@ ProSchool360 Context (English data from database):
 ${enhancedContext}
 
 User's Original Question: "${query}"
-Detected Language: ${userLanguage}
 
 IMPORTANT INSTRUCTIONS:
-1. The user asked in ${userLanguage}
-2. Respond ONLY in ${userLanguage} language
+1. Respond in the EXACT SAME LANGUAGE and STYLE as the user's question
+2. If user mixed languages, respond in the same mixed style
 3. Give COMPREHENSIVE, detailed answers with complete explanations
 4. Provide step-by-step navigation: Menu → Submenu → Action
 5. Include examples, tips, and additional helpful information
 6. Skip branch-related information
-7. Use clear, professional language
 
-Provide comprehensive ProSchool360 guidance in ${userLanguage} with detailed explanations.`;
+Respond in the same language and style as: "${query}"`;
       } catch (fallbackError) {
         console.error(`[${timestamp}] Fallback Error:`, {
           message: fallbackError.message,
@@ -201,11 +197,10 @@ Provide comprehensive ProSchool360 guidance in ${userLanguage} with detailed exp
         prompt = `You are a ProSchool360 assistant.
 
 User's Original Question: "${query}"
-Detected Language: ${userLanguage}
 
 IMPORTANT INSTRUCTIONS:
-1. The user asked in ${userLanguage}
-2. Respond ONLY in ${userLanguage} language
+1. Respond in the EXACT SAME LANGUAGE and STYLE as the user's question
+2. If user mixed languages, respond in the same mixed style
 3. Give COMPREHENSIVE, detailed answers with complete explanations
 4. Provide step-by-step navigation: Menu → Submenu → Action
 5. Include examples, tips, and additional helpful information
@@ -213,9 +208,11 @@ IMPORTANT INSTRUCTIONS:
 
 ProSchool360 is a comprehensive school management system available at https://proschool360.com.
 
-If this question is about ProSchool360 features, provide comprehensive guidance in ${userLanguage} with detailed step-by-step instructions, examples, and helpful tips.
+Respond in the same language and style as: "${query}"
 
-If this question is not related to ProSchool360, politely explain in ${userLanguage} that you specialize in ProSchool360 assistance.`;
+If this question is about ProSchool360 features, provide comprehensive guidance with detailed step-by-step instructions, examples, and helpful tips.
+
+If this question is not related to ProSchool360, politely explain that you specialize in ProSchool360 assistance.`;
       }
     }
 
@@ -476,35 +473,10 @@ app.get('/api/training-stats', async (req, res) => {
   }
 });
 
-// Language detection function
+// Simple language detection - let Gemini handle the rest
 function detectLanguage(query) {
-  const hindiPattern = /[\u0900-\u097F]/;
-  const englishPattern = /^[a-zA-Z0-9\s\.,\?\!\-\'\"\(\)]+$/;
-  
-  // Check for Hindi/Devanagari characters
-  if (hindiPattern.test(query)) {
-    return 'Hindi';
-  }
-  
-  // Check for common Hindi words in English script
-  const hindiWords = ['kaise', 'kya', 'hai', 'hain', 'mein', 'me', 'ko', 'ka', 'ki', 'ke', 'se', 'par', 'aur', 'ya'];
-  const queryLower = query.toLowerCase();
-  if (hindiWords.some(word => queryLower.includes(word))) {
-    return 'Hindi';
-  }
-  
-  // Check for other languages (basic detection)
-  if (/[\u0C80-\u0CFF]/.test(query)) return 'Kannada';
-  if (/[\u0B80-\u0BFF]/.test(query)) return 'Tamil';
-  if (/[\u0C00-\u0C7F]/.test(query)) return 'Telugu';
-  if (/[\u0A80-\u0AFF]/.test(query)) return 'Gujarati';
-  if (/[\u0A00-\u0A7F]/.test(query)) return 'Punjabi';
-  if (/[\u0B00-\u0B7F]/.test(query)) return 'Oriya';
-  if (/[\u0980-\u09FF]/.test(query)) return 'Bengali';
-  if (/[\u0D00-\u0D7F]/.test(query)) return 'Malayalam';
-  
-  // Default to English if no other language detected
-  return 'English';
+  // Let Gemini API automatically detect and respond in user's language
+  return 'auto-detect';
 }
 
 // Helper function to check if query is about ProSchool360
@@ -534,30 +506,18 @@ async function getEnhancedProSchool360Context(query) {
     const corpus = JSON.parse(await fs.readFile('./proschool360_corpus.json', 'utf8'));
     
     const searchTerms = query.toLowerCase().split(' ');
-    const keywordMap = {
-      'student': ['student', 'admission', 'enrollment', 'register', 'enroll'],
-      'teacher': ['teacher', 'staff', 'employee', 'faculty', 'instructor'],
-      'fee': ['fee', 'payment', 'invoice', 'billing', 'finance'],
-      'attendance': ['attendance', 'present', 'absent', 'tracking'],
-      'exam': ['exam', 'test', 'result', 'grade', 'mark'],
-      'class': ['class', 'section', 'subject', 'timetable']
-    };
     
-    let relevantModules = [];
-    for (const [module, keywords] of Object.entries(keywordMap)) {
-      if (keywords.some(keyword => query.toLowerCase().includes(keyword))) {
-        relevantModules.push(module);
-      }
-    }
-    
+    // Direct search in corpus content
     const relevantFiles = corpus.filter(file => {
       const content = file.content.toLowerCase();
       const path = file.path.toLowerCase();
       
-      const isRelevantFile = path.includes('controllers/') || path.includes('views/');
-      const hasSearchTerms = searchTerms.some(term => content.includes(term) || path.includes(term));
+      // Check if any search term matches content or path
+      const hasSearchTerms = searchTerms.some(term => 
+        content.includes(term) || path.includes(term)
+      );
       
-      return isRelevantFile && hasSearchTerms;
+      return hasSearchTerms;
     }).slice(0, 10);
     
     let contextInfo = 'ProSchool360 System Information:\n\n';
