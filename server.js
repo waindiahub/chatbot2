@@ -157,12 +157,13 @@ Detected Language: ${userLanguage}
 IMPORTANT INSTRUCTIONS:
 1. The user asked in ${userLanguage}
 2. Respond ONLY in ${userLanguage} language
-3. Give BRIEF, practical answers (not too detailed)
+3. Give COMPREHENSIVE, detailed answers with complete explanations
 4. Provide step-by-step navigation: Menu → Submenu → Action
-5. Skip branch-related information
-6. Use simple, clear language
+5. Include examples, tips, and additional helpful information
+6. Skip branch-related information
+7. Use clear, professional language
 
-Provide brief ProSchool360 guidance in ${userLanguage}.`;
+Provide comprehensive ProSchool360 guidance in ${userLanguage} with detailed explanations.`;
     } else {
       chromaAvailable = false;
     }
@@ -184,12 +185,13 @@ Detected Language: ${userLanguage}
 IMPORTANT INSTRUCTIONS:
 1. The user asked in ${userLanguage}
 2. Respond ONLY in ${userLanguage} language
-3. Give BRIEF, practical answers (not too detailed)
+3. Give COMPREHENSIVE, detailed answers with complete explanations
 4. Provide step-by-step navigation: Menu → Submenu → Action
-5. Skip branch-related information
-6. Use simple, clear language
+5. Include examples, tips, and additional helpful information
+6. Skip branch-related information
+7. Use clear, professional language
 
-Provide brief ProSchool360 guidance in ${userLanguage}.`;
+Provide comprehensive ProSchool360 guidance in ${userLanguage} with detailed explanations.`;
       } catch (fallbackError) {
         console.error(`[${timestamp}] Fallback Error:`, {
           message: fallbackError.message,
@@ -204,13 +206,14 @@ Detected Language: ${userLanguage}
 IMPORTANT INSTRUCTIONS:
 1. The user asked in ${userLanguage}
 2. Respond ONLY in ${userLanguage} language
-3. Give BRIEF, practical answers (not too detailed)
+3. Give COMPREHENSIVE, detailed answers with complete explanations
 4. Provide step-by-step navigation: Menu → Submenu → Action
-5. Skip branch-related information
+5. Include examples, tips, and additional helpful information
+6. Skip branch-related information
 
 ProSchool360 is a comprehensive school management system available at https://proschool360.com.
 
-If this question is about ProSchool360 features, provide brief guidance in ${userLanguage} with step-by-step instructions.
+If this question is about ProSchool360 features, provide comprehensive guidance in ${userLanguage} with detailed step-by-step instructions, examples, and helpful tips.
 
 If this question is not related to ProSchool360, politely explain in ${userLanguage} that you specialize in ProSchool360 assistance.`;
       }
@@ -302,6 +305,17 @@ If this question is not related to ProSchool360, politely explain in ${userLangu
       });
     }
     
+    // Step 5: Save chat interaction for self-training
+    await saveChatInteraction({
+      timestamp,
+      query,
+      englishQuery,
+      userLanguage,
+      reply,
+      context: context ? 'found' : 'fallback',
+      mode: chromaAvailable ? 'embedded_chromadb' : 'enhanced_corpus_search'
+    });
+    
     console.log(`[${timestamp}] Response generated successfully`);
     res.json({ 
       reply,
@@ -325,6 +339,140 @@ If this question is not related to ProSchool360, politely explain in ${userLangu
         timestamp
       });
     }
+  }
+});
+
+// Self-training functions
+async function saveChatInteraction(interaction) {
+  try {
+    const fs = require('fs').promises;
+    const trainingFile = './chat_training_data.json';
+    
+    let trainingData = [];
+    try {
+      const existingData = await fs.readFile(trainingFile, 'utf8');
+      trainingData = JSON.parse(existingData);
+    } catch (error) {
+      // File doesn't exist, start with empty array
+    }
+    
+    trainingData.push(interaction);
+    
+    // Keep only last 1000 interactions to prevent file from getting too large
+    if (trainingData.length > 1000) {
+      trainingData = trainingData.slice(-1000);
+    }
+    
+    await fs.writeFile(trainingFile, JSON.stringify(trainingData, null, 2));
+    console.log(`[${interaction.timestamp}] Chat interaction saved for training`);
+  } catch (error) {
+    console.error('Error saving chat interaction:', error.message);
+  }
+}
+
+async function updateChromaWithTrainingData() {
+  try {
+    const fs = require('fs').promises;
+    const trainingFile = './chat_training_data.json';
+    
+    const trainingData = JSON.parse(await fs.readFile(trainingFile, 'utf8'));
+    
+    // Filter successful interactions from last 30 days
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recentInteractions = trainingData.filter(interaction => {
+      const interactionDate = new Date(interaction.timestamp);
+      return interactionDate > thirtyDaysAgo && interaction.reply && interaction.reply.length > 50;
+    });
+    
+    if (recentInteractions.length === 0) {
+      console.log('No recent training data to add to ChromaDB');
+      return false;
+    }
+    
+    // Create training documents from successful interactions
+    const trainingDocuments = recentInteractions.map(interaction => ({
+      id: `training_${interaction.timestamp}`,
+      content: `Question: ${interaction.englishQuery}\nAnswer: ${interaction.reply}\nLanguage: ${interaction.userLanguage}`,
+      metadata: {
+        type: 'training_data',
+        language: interaction.userLanguage,
+        timestamp: interaction.timestamp
+      }
+    }));
+    
+    // Add to ChromaDB if available
+    if (chromaAvailable && collection) {
+      await collection.addDocuments(trainingDocuments);
+      console.log(`Added ${trainingDocuments.length} training documents to ChromaDB`);
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Error updating ChromaDB with training data:', error.message);
+    return false;
+  }
+}
+
+// Training endpoint
+app.post('/api/train', async (req, res) => {
+  const timestamp = new Date().toISOString();
+  
+  try {
+    console.log(`[${timestamp}] Training request received`);
+    
+    const success = await updateChromaWithTrainingData();
+    
+    if (success) {
+      res.json({
+        status: 'success',
+        message: 'Training data successfully added to ChromaDB',
+        timestamp
+      });
+    } else {
+      res.json({
+        status: 'info',
+        message: 'No new training data available or ChromaDB not available',
+        timestamp
+      });
+    }
+  } catch (error) {
+    console.error(`[${timestamp}] Training Error:`, error.message);
+    res.status(500).json({
+      error: 'Training failed',
+      message: 'Unable to process training data',
+      timestamp
+    });
+  }
+});
+
+// Get training stats endpoint
+app.get('/api/training-stats', async (req, res) => {
+  try {
+    const fs = require('fs').promises;
+    const trainingFile = './chat_training_data.json';
+    
+    try {
+      const trainingData = JSON.parse(await fs.readFile(trainingFile, 'utf8'));
+      
+      const stats = {
+        totalInteractions: trainingData.length,
+        languages: [...new Set(trainingData.map(d => d.userLanguage))],
+        lastInteraction: trainingData[trainingData.length - 1]?.timestamp,
+        successfulInteractions: trainingData.filter(d => d.reply && d.reply.length > 50).length
+      };
+      
+      res.json(stats);
+    } catch (error) {
+      res.json({
+        totalInteractions: 0,
+        languages: [],
+        lastInteraction: null,
+        successfulInteractions: 0
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Unable to get training stats' });
   }
 });
 

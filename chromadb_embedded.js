@@ -132,6 +132,36 @@ class EmbeddedChromaDB {
   async count() {
     return this.corpus ? this.corpus.length : 0;
   }
+
+  async addDocuments(documents) {
+    if (!this.corpus) {
+      throw new Error('ChromaDB not initialized');
+    }
+
+    try {
+      // Add new documents to corpus
+      documents.forEach(doc => {
+        const newDoc = {
+          path: doc.id || `training_${Date.now()}`,
+          content: doc.content
+        };
+        this.corpus.push(newDoc);
+      });
+
+      // Recreate embeddings with new documents
+      this.createKeywordEmbeddings();
+
+      // Save updated corpus to training file
+      const trainingCorpusPath = path.join(process.cwd(), 'training_corpus.json');
+      await fs.writeFile(trainingCorpusPath, JSON.stringify(this.corpus, null, 2));
+
+      console.log(`Added ${documents.length} documents to embedded ChromaDB`);
+      return true;
+    } catch (error) {
+      console.error('Error adding documents to ChromaDB:', error.message);
+      return false;
+    }
+  }
 }
 
 module.exports = EmbeddedChromaDB;
