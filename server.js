@@ -139,7 +139,11 @@ app.post('/api/chat', async (req, res) => {
       }
     }
     
-    // Step 3: Build simple but effective prompt
+    // Step 3: Detect user's language first
+    const userLanguage = detectLanguage(query);
+    console.log(`[${timestamp}] Detected language: ${userLanguage}`);
+    
+    // Step 4: Build simple but effective prompt
     let prompt;
     if (context) {
       prompt = `You are a ProSchool360 expert assistant.
@@ -147,21 +151,18 @@ app.post('/api/chat', async (req, res) => {
 ProSchool360 Context (English data from database):
 ${context}
 
-User's Original Question: ${query}
-English Translation for Search: ${englishQuery}
+User's Original Question: "${query}"
+Detected Language: ${userLanguage}
 
 IMPORTANT INSTRUCTIONS:
-1. Detect the language of the user's original question: "${query}"
-2. Use the English context above to understand ProSchool360 features
-3. Respond COMPLETELY in the SAME LANGUAGE as the user's original question
-4. If user asked in Hindi/Hinglish, respond completely in Hindi
-5. If user asked in Spanish, respond completely in Spanish
-6. If user asked in any other language, respond in that language
-7. Provide step-by-step guidance with navigation paths
-8. Skip branch-related information
-9. Use practical examples and clear instructions
+1. The user asked in ${userLanguage}
+2. Respond ONLY in ${userLanguage} language
+3. Give BRIEF, practical answers (not too detailed)
+4. Provide step-by-step navigation: Menu → Submenu → Action
+5. Skip branch-related information
+6. Use simple, clear language
 
-Provide comprehensive ProSchool360 guidance in the user's original language.`;
+Provide brief ProSchool360 guidance in ${userLanguage}.`;
     } else {
       chromaAvailable = false;
     }
@@ -177,21 +178,18 @@ Provide comprehensive ProSchool360 guidance in the user's original language.`;
 ProSchool360 Context (English data from database):
 ${enhancedContext}
 
-User's Original Question: ${query}
-English Translation for Search: ${englishQuery}
+User's Original Question: "${query}"
+Detected Language: ${userLanguage}
 
 IMPORTANT INSTRUCTIONS:
-1. Detect the language of the user's original question: "${query}"
-2. Use the English context above to understand ProSchool360 features
-3. Respond COMPLETELY in the SAME LANGUAGE as the user's original question
-4. If user asked in Hindi/Hinglish, respond completely in Hindi
-5. If user asked in Spanish, respond completely in Spanish
-6. If user asked in any other language, respond in that language
-7. Provide step-by-step guidance with navigation paths
-8. Skip branch-related information
-9. Use practical examples and clear instructions
+1. The user asked in ${userLanguage}
+2. Respond ONLY in ${userLanguage} language
+3. Give BRIEF, practical answers (not too detailed)
+4. Provide step-by-step navigation: Menu → Submenu → Action
+5. Skip branch-related information
+6. Use simple, clear language
 
-Provide comprehensive ProSchool360 guidance in the user's original language.`;
+Provide brief ProSchool360 guidance in ${userLanguage}.`;
       } catch (fallbackError) {
         console.error(`[${timestamp}] Fallback Error:`, {
           message: fallbackError.message,
@@ -201,22 +199,20 @@ Provide comprehensive ProSchool360 guidance in the user's original language.`;
         prompt = `You are a ProSchool360 assistant.
 
 User's Original Question: "${query}"
+Detected Language: ${userLanguage}
 
 IMPORTANT INSTRUCTIONS:
-1. Detect the language of the user's original question: "${query}"
-2. Respond COMPLETELY in the SAME LANGUAGE as the user's question
-3. If user asked in Hindi/Hinglish, respond completely in Hindi
-4. If user asked in Spanish, respond completely in Spanish
-5. If user asked in any other language, respond in that language
-6. Use your knowledge of ProSchool360 features to provide helpful guidance
-7. Provide step-by-step instructions and navigation paths
-8. Skip branch-related information
+1. The user asked in ${userLanguage}
+2. Respond ONLY in ${userLanguage} language
+3. Give BRIEF, practical answers (not too detailed)
+4. Provide step-by-step navigation: Menu → Submenu → Action
+5. Skip branch-related information
 
 ProSchool360 is a comprehensive school management system available at https://proschool360.com.
 
-If this question is about ProSchool360 features, provide helpful guidance in the user's original language with step-by-step instructions and practical examples.
+If this question is about ProSchool360 features, provide brief guidance in ${userLanguage} with step-by-step instructions.
 
-If this question is not related to ProSchool360, politely explain in the user's original language that you specialize in ProSchool360 assistance.`;
+If this question is not related to ProSchool360, politely explain in ${userLanguage} that you specialize in ProSchool360 assistance.`;
       }
     }
 
@@ -331,6 +327,37 @@ If this question is not related to ProSchool360, politely explain in the user's 
     }
   }
 });
+
+// Language detection function
+function detectLanguage(query) {
+  const hindiPattern = /[\u0900-\u097F]/;
+  const englishPattern = /^[a-zA-Z0-9\s\.,\?\!\-\'\"\(\)]+$/;
+  
+  // Check for Hindi/Devanagari characters
+  if (hindiPattern.test(query)) {
+    return 'Hindi';
+  }
+  
+  // Check for common Hindi words in English script
+  const hindiWords = ['kaise', 'kya', 'hai', 'hain', 'mein', 'me', 'ko', 'ka', 'ki', 'ke', 'se', 'par', 'aur', 'ya'];
+  const queryLower = query.toLowerCase();
+  if (hindiWords.some(word => queryLower.includes(word))) {
+    return 'Hindi';
+  }
+  
+  // Check for other languages (basic detection)
+  if (/[\u0C80-\u0CFF]/.test(query)) return 'Kannada';
+  if (/[\u0B80-\u0BFF]/.test(query)) return 'Tamil';
+  if (/[\u0C00-\u0C7F]/.test(query)) return 'Telugu';
+  if (/[\u0A80-\u0AFF]/.test(query)) return 'Gujarati';
+  if (/[\u0A00-\u0A7F]/.test(query)) return 'Punjabi';
+  if (/[\u0B00-\u0B7F]/.test(query)) return 'Oriya';
+  if (/[\u0980-\u09FF]/.test(query)) return 'Bengali';
+  if (/[\u0D00-\u0D7F]/.test(query)) return 'Malayalam';
+  
+  // Default to English if no other language detected
+  return 'English';
+}
 
 // Helper function to check if query is about ProSchool360
 function isProSchool360Query(query, context = '') {
