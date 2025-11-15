@@ -56,7 +56,7 @@ async function translateToEnglish(query, timestamp) {
   try {
     console.log(`[${timestamp}] Translating query to English for ChromaDB search...`);
     const translateResponse = await axios.post(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent',
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent',
       {
         contents: [{
           parts: [{ text: `Translate this question to English for database search. Only return the English translation: "${query}"` }]
@@ -241,7 +241,7 @@ If this question is not related to ProSchool360, politely explain in ${userLangu
     try {
       console.log(`[${timestamp}] Calling Gemini API...`);
       geminiResponse = await axios.post(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent',
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent',
         {
           contents: [{
             parts: [{ text: prompt }]
