@@ -166,14 +166,17 @@ ${context}
 User's Original Question: "${query}"
 
 IMPORTANT INSTRUCTIONS:
-1. Respond in the EXACT SAME LANGUAGE and STYLE as the user's question
-2. If user mixed languages, respond in the same mixed style
-3. Give COMPREHENSIVE, detailed answers with complete explanations
-4. Provide step-by-step navigation: Menu → Submenu → Action
-5. Include examples, tips, and additional helpful information
-6. Skip branch-related information
+1. The user asked: "${query}"
+2. Notice the user's language mixing style - they used both English and Hindi words
+3. Respond in the EXACT SAME mixed language style
+4. Use English words where user used English, Hindi words where user used Hindi
+5. If user wrote "students kse add kre" - respond with similar English-Hindi mixing
+6. Give COMPREHENSIVE, detailed answers with complete explanations
+7. Provide step-by-step navigation: Menu → Submenu → Action
+8. Include examples, tips, and additional helpful information
+9. Skip branch-related information
 
-Respond in the same language and style as: "${query}"`;
+MATCH THIS EXACT STYLE: "${query}" - mix languages the same way!`;
     } else {
       chromaAvailable = false;
     }
@@ -192,14 +195,17 @@ ${enhancedContext}
 User's Original Question: "${query}"
 
 IMPORTANT INSTRUCTIONS:
-1. Respond in the EXACT SAME LANGUAGE and STYLE as the user's question
-2. If user mixed languages, respond in the same mixed style
-3. Give COMPREHENSIVE, detailed answers with complete explanations
-4. Provide step-by-step navigation: Menu → Submenu → Action
-5. Include examples, tips, and additional helpful information
-6. Skip branch-related information
+1. The user asked: "${query}"
+2. Notice the user's language mixing style - they used both English and Hindi words
+3. Respond in the EXACT SAME mixed language style
+4. Use English words where user used English, Hindi words where user used Hindi
+5. If user wrote "students kse add kre" - respond with similar English-Hindi mixing
+6. Give COMPREHENSIVE, detailed answers with complete explanations
+7. Provide step-by-step navigation: Menu → Submenu → Action
+8. Include examples, tips, and additional helpful information
+9. Skip branch-related information
 
-Respond in the same language and style as: "${query}"`;
+MATCH THIS EXACT STYLE: "${query}" - mix languages the same way!`;
       } catch (fallbackError) {
         console.error(`[${timestamp}] Fallback Error:`, {
           message: fallbackError.message,
@@ -211,16 +217,19 @@ Respond in the same language and style as: "${query}"`;
 User's Original Question: "${query}"
 
 IMPORTANT INSTRUCTIONS:
-1. Respond in the EXACT SAME LANGUAGE and STYLE as the user's question
-2. If user mixed languages, respond in the same mixed style
-3. Give COMPREHENSIVE, detailed answers with complete explanations
-4. Provide step-by-step navigation: Menu → Submenu → Action
-5. Include examples, tips, and additional helpful information
-6. Skip branch-related information
+1. The user asked: "${query}"
+2. Notice the user's language mixing style - they used both English and Hindi words
+3. Respond in the EXACT SAME mixed language style
+4. Use English words where user used English, Hindi words where user used Hindi
+5. If user wrote "students kse add kre" - respond with similar English-Hindi mixing
+6. Give COMPREHENSIVE, detailed answers with complete explanations
+7. Provide step-by-step navigation: Menu → Submenu → Action
+8. Include examples, tips, and additional helpful information
+9. Skip branch-related information
 
 ProSchool360 is a comprehensive school management system available at https://proschool360.com.
 
-Respond in the same language and style as: "${query}"
+MATCH THIS EXACT STYLE: "${query}" - mix languages the same way!
 
 If this question is about ProSchool360 features, provide comprehensive guidance with detailed step-by-step instructions, examples, and helpful tips.
 
