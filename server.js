@@ -67,7 +67,7 @@ async function translateToEnglish(query, timestamp) {
           'Content-Type': 'application/json',
           'X-goog-api-key': process.env.GEMINI_API_KEY
         },
-        timeout: 10000
+        timeout: 5000
       }
     );
     
@@ -115,15 +115,27 @@ app.post('/api/chat', async (req, res) => {
       });
     }
 
-    // Step 1: Translate query to English for ChromaDB search
-    const englishQuery = await translateToEnglish(query, timestamp);
+    // Step 1: Translate query to English for ChromaDB search (with timeout)
+    let englishQuery;
+    try {
+      englishQuery = await Promise.race([
+        translateToEnglish(query, timestamp),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Translation timeout')), 3000))
+      ]);
+    } catch (error) {
+      console.log(`[${timestamp}] Translation failed or timed out, using original query`);
+      englishQuery = query;
+    }
     
-    // Step 2: Get context from ChromaDB using English query
+    // Step 2: Get context from ChromaDB using English query (with timeout)
     let context = '';
     if (chromaAvailable) {
       try {
         console.log(`[${timestamp}] Searching ChromaDB with English query...`);
-        const chromaResults = await collection.query(englishQuery, 8);
+        const chromaResults = await Promise.race([
+          collection.query(englishQuery, 5), // Reduced from 8 to 5 for speed
+          new Promise((_, reject) => setTimeout(() => reject(new Error('ChromaDB timeout')), 2000))
+        ]);
         const documents = chromaResults.documents[0] || [];
         
         if (documents.length > 0) {
@@ -134,7 +146,7 @@ app.post('/api/chat', async (req, res) => {
           chromaAvailable = false;
         }
       } catch (error) {
-        console.error(`[${timestamp}] ChromaDB search failed:`, error.message);
+        console.error(`[${timestamp}] ChromaDB search failed or timed out:`, error.message);
         chromaAvailable = false;
       }
     }
@@ -252,7 +264,7 @@ If this question is not related to ProSchool360, politely explain that you speci
             'Content-Type': 'application/json',
             'X-goog-api-key': process.env.GEMINI_API_KEY
           },
-          timeout: 30000 // 30 second timeout
+          timeout: 15000 // 15 second timeout
         }
       );
       console.log(`[${timestamp}] Gemini API call successful`);
