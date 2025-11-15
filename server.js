@@ -127,63 +127,115 @@ app.post('/api/chat', async (req, res) => {
       englishQuery = query;
     }
     
-    // Step 2: Get context from ChromaDB using English query (REQUIRED for AI responses)
+    // Step 2: Get context from ChromaDB using English query (with timeout)
     let context = '';
     if (chromaAvailable) {
       try {
         console.log(`[${timestamp}] Searching ChromaDB with English query...`);
         const chromaResults = await Promise.race([
-          collection.query(englishQuery, 8), // Increased back to 8 for better AI context
-          new Promise((_, reject) => setTimeout(() => reject(new Error('ChromaDB timeout')), 3000))
+          collection.query(englishQuery, 5), // Reduced from 8 to 5 for speed
+          new Promise((_, reject) => setTimeout(() => reject(new Error('ChromaDB timeout')), 2000))
         ]);
         const documents = chromaResults.documents[0] || [];
         
         if (documents.length > 0) {
           context = documents.join('\n\n');
-          console.log(`[${timestamp}] Found ${documents.length} relevant documents for AI analysis`);
+          console.log(`[${timestamp}] Found ${documents.length} relevant documents`);
         } else {
-          console.log(`[${timestamp}] No ChromaDB documents found - AI needs context`);
+          console.log(`[${timestamp}] No documents found, using fallback`);
           chromaAvailable = false;
         }
       } catch (error) {
-        console.error(`[${timestamp}] ChromaDB search failed:`, error.message);
+        console.error(`[${timestamp}] ChromaDB search failed or timed out:`, error.message);
         chromaAvailable = false;
       }
-    }
-    
-    // If no ChromaDB context available, inform user
-    if (!context || context.trim().length === 0) {
-      console.log(`[${timestamp}] No context available - AI requires ChromaDB data`);
-      return res.status(503).json({
-        error: 'Service temporarily unavailable',
-        message: 'AI assistant requires database context to provide accurate responses. Please try again later.',
-        timestamp
-      });
     }
     
     // Step 3: Detect user's language first
     const userLanguage = detectLanguage(query);
     console.log(`[${timestamp}] Detected language: ${userLanguage}`);
     
-    // Step 4: Build AI prompt with ChromaDB context
-    const prompt = `You are an intelligent AI assistant specializing in ProSchool360.
+    // Step 4: Build simple but effective prompt
+    let prompt;
+    if (context) {
+      prompt = `You are a ProSchool360 expert assistant.
 
-Relevant ProSchool360 Code & Documentation:
+ProSchool360 Context (English data from database):
 ${context}
 
-User Question: "${query}"
+User's Original Question: "${query}"
 
-INSTRUCTIONS:
-1. Analyze the provided code/documentation to understand the exact functionality
-2. Base your response entirely on the ChromaDB context above
-3. Respond in the same language style as the user's question
-4. Provide intelligent, context-aware answers with code insights
-5. Give step-by-step implementation guidance based on the actual code
-6. Include relevant technical details from the context
-7. Skip branch-related information
-8. Be comprehensive and detailed in your analysis
+IMPORTANT INSTRUCTIONS:
+1. The user asked: "${query}"
+2. Notice the user's language mixing style - they used both English and Hindi words
+3. Respond in the EXACT SAME mixed language style
+4. Use English words where user used English, Hindi words where user used Hindi
+5. If user wrote "students kse add kre" - respond with similar English-Hindi mixing
+6. Give COMPREHENSIVE, detailed answers with complete explanations
+7. Provide step-by-step navigation: Menu → Submenu → Action
+8. Include examples, tips, and additional helpful information
+9. Skip branch-related information
 
-Provide an intelligent response based solely on the ChromaDB context.`;
+MATCH THIS EXACT STYLE: "${query}" - mix languages the same way!`;
+    } else {
+      chromaAvailable = false;
+    }
+    
+    if (!chromaAvailable) {
+      // Advanced fallback mode
+      try {
+        console.log(`[${timestamp}] Using advanced fallback mode`);
+        const enhancedContext = await getEnhancedProSchool360Context(englishQuery);
+        
+        prompt = `You are a ProSchool360 expert assistant.
+
+ProSchool360 Context (English data from database):
+${enhancedContext}
+
+User's Original Question: "${query}"
+
+IMPORTANT INSTRUCTIONS:
+1. The user asked: "${query}"
+2. Notice the user's language mixing style - they used both English and Hindi words
+3. Respond in the EXACT SAME mixed language style
+4. Use English words where user used English, Hindi words where user used Hindi
+5. If user wrote "students kse add kre" - respond with similar English-Hindi mixing
+6. Give COMPREHENSIVE, detailed answers with complete explanations
+7. Provide step-by-step navigation: Menu → Submenu → Action
+8. Include examples, tips, and additional helpful information
+9. Skip branch-related information
+
+MATCH THIS EXACT STYLE: "${query}" - mix languages the same way!`;
+      } catch (fallbackError) {
+        console.error(`[${timestamp}] Fallback Error:`, {
+          message: fallbackError.message,
+          stack: fallbackError.stack
+        });
+        
+        prompt = `You are a ProSchool360 assistant.
+
+User's Original Question: "${query}"
+
+IMPORTANT INSTRUCTIONS:
+1. The user asked: "${query}"
+2. Notice the user's language mixing style - they used both English and Hindi words
+3. Respond in the EXACT SAME mixed language style
+4. Use English words where user used English, Hindi words where user used Hindi
+5. If user wrote "students kse add kre" - respond with similar English-Hindi mixing
+6. Give COMPREHENSIVE, detailed answers with complete explanations
+7. Provide step-by-step navigation: Menu → Submenu → Action
+8. Include examples, tips, and additional helpful information
+9. Skip branch-related information
+
+ProSchool360 is a comprehensive school management system available at https://proschool360.com.
+
+MATCH THIS EXACT STYLE: "${query}" - mix languages the same way!
+
+If this question is about ProSchool360 features, provide comprehensive guidance with detailed step-by-step instructions, examples, and helpful tips.
+
+If this question is not related to ProSchool360, politely explain that you specialize in ProSchool360 assistance.`;
+      }
+    }
 
     // Validate prompt before API call
     if (!prompt || prompt.trim().length === 0) {
